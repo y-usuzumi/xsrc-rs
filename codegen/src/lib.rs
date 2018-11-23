@@ -1,3 +1,4 @@
+#![feature(type_ascription)]
 pub mod javascript;
 pub mod typescript;
 
