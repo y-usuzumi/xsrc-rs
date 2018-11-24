@@ -169,12 +169,14 @@ pub enum Expr<'a> {
     Func{
         ident: String,
         params: &'a [String],
-        stmts: &'a [Stmt<'a>]
+        stmts: &'a [Stmt<'a>],
+        is_async: bool
     },
     // (p1, p2) => { ... }
     ArrowFunc{
         params: &'a [String],
-        body: Either<&'a [Stmt<'a>], Box<Expr<'a>>>
+        body: Either<&'a [Stmt<'a>], Box<Expr<'a>>>,
+        is_async: bool
     }
 
 }
@@ -190,31 +192,35 @@ impl<'a> Gen for Expr<'a> {
                 let rendered_args = args.iter().map(|v| v.gen()).collect::<Vec<String>>().join(", ");
                 format!("{}({})", func.gen(), rendered_args)
             },
-            Expr::Func{ ident, params, stmts} => {
+            Expr::Func{ ident, params, stmts, is_async } => {
                 let rendered_stmts = stmts.iter().map(|v| v.gen()).collect::<Vec<String>>().join("\n");
                 format!("\
-(function {ident}({params}) {{
+({async_}function {ident}({params}) {{
 {stmts}
 }})",
+                        async_ = if *is_async { "async " } else { "" },
                         ident = ident,
                         params = params.join(", "),
                         stmts = rendered_stmts
                 )
             },
-            Expr::ArrowFunc{ params, body } => {
+            Expr::ArrowFunc{ params, body, is_async } => {
+                let async_ = if *is_async { "async "} else { "" };
                 match body {
                     Either::Left(stmts) => {
                         let rendered_stmts = stmts.iter().map(|v| v.gen()).collect::<Vec<String>>().join("\n");
                         format!("\
-({params}) => {{
+({async_}{params}) => {{
 {stmts}
 }}",
+                                async_ = async_,
                                 params = params.join(", "),
                                 stmts = rendered_stmts)
                     },
                     Either::Right(expr) => {
                         format!("\
-                            ({params}) => {expr}",
+                            {async_}({params}) => {expr}",
+                                async_ = async_,
                                 params = params.join(", "),
                                 expr = expr.gen()
                         )
@@ -266,13 +272,13 @@ mod tests {
             let func_expr = Expr::Func{
                 ident: "myFunc".to_string(),
                 params,
-                stmts: &[stmt]
+                stmts: &[stmt],
+                is_async: false,
             };
             assert_eq!(func_expr.gen(), "\
 (function myFunc(someVar) {
 console.log(\"OK\");
-})".to_string()
-            );
+})")
         }
 
         #[test]
@@ -285,10 +291,11 @@ console.log(\"OK\");
             };
             let arrow_func_expr = Expr::ArrowFunc{
                 params,
-                body: Either::Right(Box::new(expr))
+                body: Either::Right(Box::new(expr)),
+                is_async: true
             };
             assert_eq!(arrow_func_expr.gen(), "\
-(someVar) => console.log(\"OK\")\
+async (someVar) => console.log(\"OK\")\
 "
             );
         }

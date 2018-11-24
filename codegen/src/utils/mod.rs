@@ -16,12 +16,9 @@ mod tests {
     fn indent_should_work() {
         let code = "\
 hello
-world
-";
-        let expected = "\
-    hello
-    world
-";
+world";
+        let expected = "    hello
+    world";
         assert_eq!(indent(code, "    "), expected);
     }
 }
