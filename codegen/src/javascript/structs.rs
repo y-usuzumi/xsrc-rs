@@ -1,5 +1,4 @@
 use std::fmt;
-use std::string::ToString;
 use super::super::utils::{Either};
 
 pub trait Gen {
@@ -52,7 +51,7 @@ pub struct Decl {
 
 impl Gen for Decl {
     fn gen(&self) -> String {
-        format!("{} {}", self.typ.to_string(), self.ident.to_string())
+        format!("{} {}", self.typ, self.ident)
     }
 }
 
@@ -66,7 +65,7 @@ pub struct Assign<'a>{
 impl<'a> Gen for Assign<'a> {
     fn gen(&self) -> String {
         match self.typ {
-            Some(ref typ) => format!("{} {} = {}", typ.to_string(), self.ident, self.expr.gen()),
+            Some(ref typ) => format!("{} {} = {}", typ, self.ident, self.expr.gen()),
             None => format!("{} = {}", self.ident, self.expr.gen())
         }
     }
@@ -234,7 +233,7 @@ mod tests {
         #[test]
         fn const_expr() {
             let const_expr = Expr::Literal{ val: Literal::String("OK".to_string()) };
-            assert_eq!(const_expr.gen(), "\"OK\"".to_string());
+            assert_eq!(const_expr.gen(), "\"OK\"");
         }
 
         #[test]
@@ -290,7 +289,7 @@ console.log(\"OK\");
             };
             assert_eq!(arrow_func_expr.gen(), "\
 (someVar) => console.log(\"OK\")\
-".to_string()
+"
             );
         }
     }
