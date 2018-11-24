@@ -4,16 +4,24 @@ pub enum Either<L, R> {
     Right(R)
 }
 
-// pub fn indent(s: String, by: String) -> String {
-//     s.split("\n").map(|line| by + line).concat("\n")
-// }
+pub fn indent(s: &str, by: &str) -> String {
+    s.split("\n").map(|line| format!("{}{}", by, line)).collect::<Vec<_>>().join("\n")
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn indent() {
-        assert_eq!(1, 1);
+    fn indent_should_work() {
+        let code = "\
+hello
+world
+";
+        let expected = "\
+    hello
+    world
+";
+        assert_eq!(indent(code, "    "), expected);
     }
 }
