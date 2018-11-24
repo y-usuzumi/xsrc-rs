@@ -1,6 +1,7 @@
 #![feature(type_ascription)]
 pub mod javascript;
 pub mod typescript;
+pub mod utils;
 
 pub fn test() {
     println!("CodeGen");
