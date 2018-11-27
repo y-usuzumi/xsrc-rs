@@ -244,7 +244,7 @@ impl Gen for Expr {
 }
 
 pub struct Constructor {
-    params: Vec<String>,
+    params: Vec<Ident>,
     stmts: Vec<Stmt>,
 }
 
@@ -252,10 +252,10 @@ impl Gen for Constructor {
     fn gen(&self, ctx: &GenContext) -> String {
         let rendered_stmts = self.stmts.iter().map(|v| v.gen(ctx)).collect::<Vec<String>>().join("\n");
         format!("\
-            (constructor({params}) {{
+            constructor({params}) {{
 {stmts}
-}})",
-                params = self.params.join(", "),
+}}",
+                params = self.params.iter().map(|v| v.gen(ctx)).collect::<Vec<String>>().join(", "),
                 stmts = rendered_stmts
         )
     }
@@ -284,9 +284,33 @@ impl Gen for Method {
 }
 
 pub struct Class {
-    extends: Rc<Class>,
+    ident: Ident,
+    extends: Option<Ident>,
     constructor: Option<Constructor>,
     methods: Vec<Method>
+}
+
+impl Gen for Class {
+    fn gen(&self, ctx: &GenContext) -> String {
+        let mut rendered_methods: Vec<String> = Vec::new();
+        match &self.constructor {
+            Some(c) => {
+                rendered_methods.push(c.gen(ctx));
+            },
+            None => {}
+        };
+        format!("\
+class {ident} {extends}{{
+{methods}
+}}",
+                ident = self.ident.gen(ctx),
+                extends = match &self.extends {
+                    Some(c) => format!("extends {} ", c.gen(ctx)),
+                    None => String::new(),
+                },
+                methods = rendered_methods.join("\n")
+        )
+    }
 }
 
 
@@ -453,6 +477,38 @@ console.log(\"OK\");
 alert((3) + (4));
 }\
 ")
+        }
+    }
+
+    mod class {
+        use super::super::*;
+        #[test]
+        fn class() {
+            let ident = Ident("XiaoSi".to_string());
+            let parent = Class {
+                ident: Ident("Parent".to_string()),
+                extends: None,
+                constructor: None,
+                methods: Vec::new()
+            };
+            let constructor = Constructor {
+                params: vec![Ident("url".to_string()), Ident("params".to_string())],
+                stmts: vec![
+                    Stmt::Expr{
+                        expr: Expr::FuncCall {
+                            func: Box::new(Expr::Var{ident: "console.log".to_string()}),
+                            args: vec![Expr::Literal{val: Literal::String("Hello world!".to_string())}]
+                        }
+                    }
+                ]
+            };
+            let xiaosi_class = Class {
+                ident,
+                extends: Some(Ident("Parent".to_string())),
+                constructor: Some(constructor),
+                methods: Vec::new()
+            };
+            println!("{}", xiaosi_class.gen(&GenContext{}));
         }
     }
 
