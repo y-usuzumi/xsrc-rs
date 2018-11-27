@@ -1,4 +1,5 @@
 use std::fmt;
+use std::rc::Rc;
 use super::super::utils::{Either};
 
 pub struct GenContext{}
@@ -67,13 +68,13 @@ impl Gen for Decl {
 }
 
 #[derive(Debug)]
-pub struct Assign<'a>{
+pub struct Assign {
     typ: Option<DeclType>,
     ident: Ident,
-    expr: Expr<'a>
+    expr: Expr
 }
 
-impl<'a> Gen for Assign<'a> {
+impl Gen for Assign {
     fn gen(&self, ctx: &GenContext) -> String {
         match self.typ {
             Some(ref typ) => format!("{} {} = {}", typ, self.ident.gen(ctx), self.expr.gen(ctx)),
@@ -83,10 +84,10 @@ impl<'a> Gen for Assign<'a> {
 }
 
 #[derive(Debug)]
-pub enum Stmt<'a> {
+pub enum Stmt {
     // All expressions are automatically statements
     Expr {
-        expr: Expr<'a>
+        expr: Expr
     },
     // var a;
     Decl {
@@ -95,19 +96,19 @@ pub enum Stmt<'a> {
     // Assign(None, "a", 3) => a = 3;
     // Assign(DeclType::Let, "a", 3) => let a = 3;
     Assign {
-        assign: Assign<'a>
+        assign: Assign
     },
     // for(let a = 0; a < 10; a++) { ... }
     // TODO: The initialization section of a for-loop supports more than just an assignment
     ForLoop {
-        inst: Option<Assign<'a>>,
-        chk: Option<Expr<'a>>,
-        incr: Option<Expr<'a>>,
-        stmts: Vec<Stmt<'a>>
+        inst: Option<Assign>,
+        chk: Option<Expr>,
+        incr: Option<Expr>,
+        stmts: Vec<Stmt>
     },
 }
 
-impl<'a> Gen for Stmt<'a> {
+impl Gen for Stmt {
     fn gen(&self, ctx: &GenContext) -> String {
         match self {
             Stmt::Expr{expr} => format!("{};", expr.gen(ctx)),
@@ -150,7 +151,7 @@ impl Gen for ArithOp {
 }
 
 #[derive(Debug)]
-pub enum Expr<'a> {
+pub enum Expr {
     // 3
     Literal{
         val: Literal
@@ -162,37 +163,37 @@ pub enum Expr<'a> {
     // a > b
     Comp{
         op: CompOp,
-        l: Box<Expr<'a>>,
-        r: Box<Expr<'a>>
+        l: Box<Expr>,
+        r: Box<Expr>
     },
     // a + b
     Arith{
         op: ArithOp,
-        l: Box<Expr<'a>>,
-        r: Box<Expr<'a>>
+        l: Box<Expr>,
+        r: Box<Expr>
     },
     // someFunc("OK", 123)
     FuncCall{
-        func: Box<Expr<'a>>,
-        args: Vec<Expr<'a>>,
+        func: Box<Expr>,
+        args: Vec<Expr>,
     },
     // (function (p1, p2) { ... })
     Func{
         ident: String,
         params: Vec<String>,
-        stmts: Vec<Stmt<'a>>,
+        stmts: Vec<Stmt>,
         is_async: bool
     },
     // (p1, p2) => { ... }
     ArrowFunc{
-        params: &'a [String],
-        body: Either<&'a [Stmt<'a>], Box<Expr<'a>>>,
+        params: Vec<String>,
+        body: Either<Vec<Stmt>, Box<Expr>>,
         is_async: bool
     }
 
 }
 
-impl<'a> Gen for Expr<'a> {
+impl Gen for Expr {
     fn gen(&self, ctx: &GenContext) -> String {
         match self {
             Expr::Literal{ val } => val.gen(ctx),
@@ -243,20 +244,34 @@ impl<'a> Gen for Expr<'a> {
 }
 
 pub struct Constructor {
-    params: Vec<String>
+    params: Vec<String>,
+    stmts: Vec<Stmt>,
 }
 
-pub struct Method<'a> {
+impl Gen for Constructor {
+    fn gen(&self, ctx: &GenContext) -> String {
+        let rendered_stmts = self.stmts.iter().map(|v| v.gen(ctx)).collect::<Vec<String>>().join("\n");
+        format!("\
+            (constructor({params}) {{
+{stmts}
+}})",
+                params = self.params.join(", "),
+                stmts = rendered_stmts
+        )
+    }
+}
+
+pub struct Method {
     ident: Ident,
     params: Vec<String>,
-    stmts: Vec<Stmt<'a>>,
+    stmts: Vec<Stmt>,
     is_async: bool
 }
 
-pub struct Class<'a> {
-    extends: &'a Class<'a>,
+pub struct Class {
+    extends: Rc<Class>,
     constructor: Option<Constructor>,
-    methods: Vec<Method<'a>>
+    methods: Vec<Method>
 }
 
 
@@ -284,7 +299,7 @@ mod tests {
             let ctx = GenContext{};
             let func_call_expr = Expr::FuncCall{
                 // TODO: Improper use of `Var`
-                func: Box::new(Expr::Var{ ident: "console.log".to_string() }),
+                func: box Expr::Var{ ident: "console.log".to_string() },
                 args: vec![Expr::Var{ ident: "someVar".to_string() }]
             };
             assert_eq!(func_call_expr.gen(&ctx), "console.log(someVar)");
@@ -296,7 +311,7 @@ mod tests {
             let stmt = Stmt::Expr{
                 expr: Expr::FuncCall{
                     // TODO: Improper use of `Var`
-                    func: Box::new(Expr::Var{ ident: "console.log".to_string() }),
+                    func: box Expr::Var{ ident: "console.log".to_string() },
                     args: vec![Expr::Literal{ val: Literal::String("OK".to_string()) }]
                 }
             };
@@ -315,14 +330,13 @@ console.log(\"OK\");
         #[test]
         fn arrow_func_expr() {
             let ctx = GenContext{};
-            let params = &["someVar".to_string()];
             let expr = Expr::FuncCall{
                 // TODO: Improper use of `Var`
-                func: Box::new(Expr::Var{ ident: "console.log".to_string() }),
+                func: box Expr::Var{ ident: "console.log".to_string() },
                 args: vec![Expr::Literal{ val: Literal::String("OK".to_string()) }]
             };
             let arrow_func_expr = Expr::ArrowFunc{
-                params,
+                params: vec!["someVar".to_string()],
                 body: Either::Right(Box::new(expr)),
                 is_async: true
             };
@@ -341,7 +355,7 @@ async (someVar) => console.log(\"OK\")\
             let ctx = GenContext{};
             // TODO: Improper use of `Var` here
             let expr = Expr::FuncCall{
-                func: Box::new(Expr::Var{ ident: "console.log".to_string() }),
+                func: box Expr::Var{ ident: "console.log".to_string() },
                 args: vec![Expr::Literal{ val: Literal::String("OK".to_string()) }]
             };
             let expr_stmt = Stmt::Expr{expr};
@@ -362,7 +376,7 @@ async (someVar) => console.log(\"OK\")\
             let ctx = GenContext{};
             let func_call = Expr::FuncCall{
                 // TODO: Improper use of `Var` here
-                func: Box::new(Expr::Var{ ident: "console.log".to_string() }),
+                func: box Expr::Var{ ident: "console.log".to_string() },
                 args: vec![Expr::Literal{ val: Literal::String("OK".to_string()) }]
             };
             let global_assign_stmt = Stmt::Assign{
@@ -380,7 +394,7 @@ async (someVar) => console.log(\"OK\")\
             let ctx = GenContext{};
             let func_call_1 = Expr::FuncCall{
                 // TODO: Improper use of `Var` here
-                func: Box::new(Expr::Var{ ident: "console.log".to_string() }),
+                func: box Expr::Var{ ident: "console.log".to_string() },
                 args: vec![Expr::Literal{ val: Literal::String("OK".to_string()) }]
             };
             let func_args_2 = vec![

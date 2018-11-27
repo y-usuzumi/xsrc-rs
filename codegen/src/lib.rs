@@ -1,3 +1,5 @@
+#![feature(box_syntax)]
+
 pub mod javascript;
 pub mod typescript;
 pub mod utils;
