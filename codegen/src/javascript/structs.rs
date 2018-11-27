@@ -268,6 +268,21 @@ pub struct Method {
     is_async: bool
 }
 
+impl Gen for Method {
+    fn gen(&self, ctx: &GenContext) -> String {
+        let rendered_stmts = self.stmts.iter().map(|v| v.gen(ctx)).collect::<Vec<String>>().join("\n");
+        format!("\
+            {async_} {ident}({params}) {{
+{stmts}
+}}",
+                async_ = if self.is_async { "async " } else { "" },
+                ident = self.ident.gen(ctx),
+                params = self.params.join(", "),
+                stmts = rendered_stmts
+        )
+    }
+}
+
 pub struct Class {
     extends: Rc<Class>,
     constructor: Option<Constructor>,
