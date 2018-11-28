@@ -485,12 +485,6 @@ alert((3) + (4));
         #[test]
         fn class() {
             let ident = Ident("XiaoSi".to_string());
-            let parent = Class {
-                ident: Ident("Parent".to_string()),
-                extends: None,
-                constructor: None,
-                methods: Vec::new()
-            };
             let constructor = Constructor {
                 params: vec![Ident("url".to_string()), Ident("params".to_string())],
                 stmts: vec![
@@ -508,7 +502,12 @@ alert((3) + (4));
                 constructor: Some(constructor),
                 methods: Vec::new()
             };
-            println!("{}", xiaosi_class.gen(&GenContext{}));
+            assert_eq!(xiaosi_class.gen(&GenContext{}), "\
+class XiaoSi extends Parent {
+constructor(url, params) {
+console.log(\"Hello world!\");
+}
+}");
         }
     }
 
