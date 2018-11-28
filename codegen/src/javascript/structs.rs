@@ -444,7 +444,7 @@ impl Gen for Import {
                 path = self.path
             )
         } else {
-            format!("import from \"{path}\";", path = self.path)
+            format!("import \"{path}\";", path = self.path)
         }
     }
 }
@@ -682,7 +682,7 @@ alert((3) + (4));
         };
         let methods = vec![Method {
             ident: Ident("loves".to_string()),
-            params: vec!["橙月".to_string()],
+            params: vec!["singoi".to_string()],
             stmts: vec![Stmt::Return {
                 expr: Expr::Literal {
                     val: Literal::Boolean(true),
@@ -695,7 +695,7 @@ alert((3) + (4));
             stmts: vec![Stmt::Return {
                 expr: Expr::Literal {
                     val: Literal::Number(23.0),
-                }
+                },
             }],
         }];
         let xiaosi_class = Class {
@@ -714,7 +714,7 @@ export class XiaoSi extends Parent {
 constructor(url, params) {
 console.log(\"Hello world!\");
 }
-async loves(橙月) {
+async loves(singoi) {
 return true;
 }
 get age() {
@@ -731,6 +731,41 @@ return 23;
             imps: Some(Left(ImportStar {})),
             path: "xiaosi".to_string(),
         };
-        println!("{}", imp.gen(&GenContext {}));
+        assert_eq!(
+            "\
+             import XiaoSi, * from \"xiaosi\";",
+            imp.gen(&GenContext {})
+        );
+    }
+
+    #[test]
+    fn xiaosi_import_named() {
+        let imp = Import {
+            def: None,
+            imps: Some(Right(vec![
+                ImportName::Simple(Ident("alpha".to_string())),
+                ImportName::Alias(Ident("beta".to_string()), Ident("bravo".to_string())),
+            ])),
+            path: "xiaosi".to_string()
+        };
+        assert_eq!(
+            "\
+             import {alpha, beta as bravo} from \"xiaosi\";",
+            imp.gen(&GenContext {})
+        );
+    }
+
+    #[test]
+    fn xiaosi_import_side_effect_only() {
+        let imp = Import {
+            def: None,
+            imps: None,
+            path: "xiaosi".to_string(),
+        };
+        assert_eq!(
+            "\
+             import \"xiaosi\";",
+            imp.gen(&GenContext {})
+        );
     }
 }
