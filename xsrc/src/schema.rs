@@ -82,13 +82,13 @@ impl<'de> Deserialize<'de> for APIDataMap {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RootSchema {
     #[serde(rename="$url")]
-    url: Option<String>,
+    pub url: Option<String>,
     
     #[serde(rename="$as", default="RootSchema::default_klsname")]
-    klsname: String,
+    pub klsname: String,
 
     #[serde(flatten)]
-    apisets: APIDataMap
+    pub apisets: APIDataMap
 }
 
 impl RootSchema {
@@ -106,21 +106,28 @@ pub enum APIData {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct APISchema {
     #[serde(rename="$method", default="APISchema::default_method")]
-    method: String
+    pub method: String,
+
+    #[serde(rename="$url", default="APISchema::default_url")]
+    pub url: String
 }
 
 impl APISchema {
     fn default_method() -> String {
         "GET".to_string()
     }
+
+    fn default_url() -> String {
+        "${super.url}".to_string()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct APISetSchema {
     #[serde(rename="$url")]
-    url: Option<String>,
+    pub url: Option<String>,
     #[serde(flatten)]
-    apisets: APIDataMap
+    pub apisets: APIDataMap
 }
 
 #[cfg(test)]

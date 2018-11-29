@@ -1,6 +1,6 @@
 extern crate xsrc;
 
-use xsrc::parser::AST;
+use xsrc::parser::RootAST;
 
 fn main() {
     println!("Hello world!");
