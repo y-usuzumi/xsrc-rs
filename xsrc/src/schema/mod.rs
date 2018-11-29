@@ -137,6 +137,6 @@ mod tests {
         println!("{:?}", env::current_dir());
         let sample_string = load_sample().unwrap();
         let result: Result<RootSchema, _> = serde_yaml::from_str(&sample_string);
-        println!("{:?}", result);
+        assert!(result.is_ok());
     }
 }
