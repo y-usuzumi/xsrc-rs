@@ -84,11 +84,17 @@ pub struct RootSchema {
     #[serde(rename="$url")]
     url: Option<String>,
     
-    #[serde(rename="$as")]
-    klsname: Option<String>,
+    #[serde(rename="$as", default="RootSchema::default_klsname")]
+    klsname: String,
 
     #[serde(flatten)]
     apisets: APIDataMap
+}
+
+impl RootSchema {
+    fn default_klsname() -> String {
+        "XSClient".to_string()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

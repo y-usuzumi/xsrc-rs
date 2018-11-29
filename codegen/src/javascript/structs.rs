@@ -109,6 +109,10 @@ pub enum Stmt {
         incr: Option<Expr>,
         stmts: Vec<Stmt>,
     },
+    Export {
+        is_default: bool,
+        stmt: Box<Stmt>
+    }
 }
 
 impl Gen for Stmt {
@@ -140,6 +144,13 @@ for ({inst}; {chk}; {incr}) {{
                 )
             }
             Stmt::Return { expr } => format!("return {};", expr.gen(ctx)),
+            Stmt::Export { is_default, stmt } => {
+                if *is_default {
+                    format!("export default {}", stmt.gen(ctx))
+                } else {
+                    format!("export {}", stmt.gen(ctx))
+                }
+            }
         }
     }
 }
@@ -368,7 +379,6 @@ pub struct Class {
     constructor: Option<Constructor>,
     methods: Vec<Method>,
     getters: Vec<Getter>,
-    exported: bool,
 }
 
 impl Gen for Class {
@@ -384,7 +394,7 @@ impl Gen for Class {
         rendered_decls.extend(self.getters.iter().map(|v| v.gen(ctx)));
         format!(
             "\
-{export}class {ident} {extends}{{
+class {ident} {extends}{{
 {decls}
 }}",
             ident = self.ident.gen(ctx),
@@ -393,7 +403,6 @@ impl Gen for Class {
                 None => String::new(),
             },
             decls = rendered_decls.join("\n"),
-            export = if self.exported { "export " } else { "" }
         )
     }
 }
@@ -664,6 +673,20 @@ alert((3) + (4));
 "
         )
     }
+
+    #[test]
+    fn named_export() {
+        let stmt = Stmt::Expr{ expr: Expr::Var{ ident: "xiaosi".to_string() } };
+        let export_stmt = Stmt::Export{ is_default: false, stmt: Box::new(stmt) };
+        assert_eq!(export_stmt.gen(&GenContext{}), "export xiaosi;")
+    }
+
+    fn default_export() {
+        let stmt = Stmt::Expr{ expr: Expr::Var{ ident: "xiaosi".to_string() } };
+        let export_stmt = Stmt::Export{ is_default: true, stmt: Box::new(stmt) };
+        assert_eq!(export_stmt.gen(&GenContext{}), "export default xiaosi;")        
+    }
+
     #[test]
     fn xiaosi_class() {
         let ident = Ident("XiaoSi".to_string());
@@ -704,13 +727,12 @@ alert((3) + (4));
             constructor: Some(constructor),
             methods,
             getters,
-            exported: true,
         };
         println!("{}", xiaosi_class.gen(&GenContext {}));
         assert_eq!(
             xiaosi_class.gen(&GenContext {}),
             "\
-export class XiaoSi extends Parent {
+class XiaoSi extends Parent {
 constructor(url, params) {
 console.log(\"Hello world!\");
 }

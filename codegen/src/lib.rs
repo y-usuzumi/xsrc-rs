@@ -4,10 +4,6 @@ pub mod javascript;
 pub mod typescript;
 pub mod utils;
 
-pub fn test() {
-    println!("CodeGen");
-}
-
 #[cfg(test)]
 mod tests {
     #[test]
