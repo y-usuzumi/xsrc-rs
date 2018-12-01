@@ -6,8 +6,23 @@ extern crate serde_yaml;
 extern crate codegen;
 
 pub mod schema;
-pub mod parser;
+pub mod transformer;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn test_ownership() {
+        #[derive(Debug)]
+        struct X { n: i32 }
+        let x = X{n: 3};
+        let xs = vec![
+            Box::new(x),
+            Box::new(X{n: 4}),
+        ];
+        for x in xs.iter() {
+            println!("{:?}", *x);
+        }
+        
+        // println!("{:?}", x);
+    }
 }
