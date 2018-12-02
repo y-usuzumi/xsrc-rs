@@ -81,7 +81,11 @@ fn is_ident_char(ch: char) -> bool {
 }
 
 fn parse_member(s: &str) -> Result<(Expr, &str), ExprParseError> {
-    panic!("Not implemented");
+    match s.chars().nth(0) {
+        Some('{') => { panic!("TODO") },
+        Some(_) => { panic!("TODO") },
+        None => Err(ExprParseError {})
+    }
 }
 
 fn parse_var(s: &str) -> Result<(Expr, Param, &str), ExprParseError> {
@@ -91,6 +95,9 @@ fn parse_var(s: &str) -> Result<(Expr, Param, &str), ExprParseError> {
     let mut pos = 0;
     for (idx, ch) in s.chars().enumerate() {
         pos = idx;
+        if ch == '>' {
+            break;
+        }
         if in_var {
             if ch == ':' {
                 in_var = false;
@@ -206,5 +213,10 @@ mod tests {
             Box::new(Expr::Var(Ident("Xiaosi".to_string()))),
         );
         assert_eq!(collect_exprs(exprs).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_parse_expr() {
+        let s = "abc${super.def}<id:gg>"
     }
 }
