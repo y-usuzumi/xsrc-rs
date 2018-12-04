@@ -29,7 +29,7 @@ impl fmt::Display for ParserError {
         match self {
             EmptyExpr => write!(f, "Expr is empty"),
             UnexpectedToken(s, pos) => write!(f, "Unexpected token \"{}\" at pos {}", s, pos),
-            UnexpectedEOF => write!(f, "字符串提前结束"),
+            UnexpectedEOF => write!(f, "Unexpected EOF"),
         }
     }
 }
