@@ -83,7 +83,7 @@ impl<'de> Deserialize<'de> for APIDataMap {
 pub struct RootSchema {
     #[serde(rename="$url")]
     pub url: Option<String>,
-    
+
     #[serde(rename="$as", default="RootSchema::default_klsname")]
     pub klsname: String,
 
