@@ -3,18 +3,17 @@ use std::fmt;
 use self::ParserError::*;
 
 #[derive(Debug, PartialEq)]
-pub struct Ident(String);
-
-#[derive(Debug, PartialEq)]
 pub enum Expr {
     Lit(String),
     Concat(Box<Expr>, Box<Expr>),
     Member(Vec<String>),
+    Var(String)
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Param {
     name: String,
-    typ: String,
+    typ: Option<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -39,7 +38,7 @@ fn parse_ref(s: &str, pos: usize) -> Result<(Expr, usize), ParserError> {
     let mut siter = s.chars().skip(pos).enumerate();
     if let Some((inner_pos, ch)) = siter.next() {
         if ch != '{' {
-            return Err(ParserError::UnexpectedToken('{'.to_string(), pos + inner_pos));
+            return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos));
         }
     } else {
         return Err(ParserError::UnexpectedEOF)
@@ -48,10 +47,10 @@ fn parse_ref(s: &str, pos: usize) -> Result<(Expr, usize), ParserError> {
     let inner_pos = loop {
         if let Some((inner_pos, ch)) = siter.next() {
             match ch {
-                '\\' => return Err(ParserError::UnexpectedToken('$'.to_string(), pos + inner_pos)),
+                '\\' => return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos)),
                 '}' => {
                     if curr_ident.len() == 0 {
-                        return Err(ParserError::UnexpectedToken('.'.to_string(), pos + inner_pos))
+                        return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos))
                     } else {
                         idents.push(curr_ident.to_owned());
                     }
@@ -59,7 +58,7 @@ fn parse_ref(s: &str, pos: usize) -> Result<(Expr, usize), ParserError> {
                 },
                 '.' => {
                     if curr_ident.len() == 0 {
-                        return Err(ParserError::UnexpectedToken('.'.to_string(), pos + inner_pos))
+                        return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos))
                     } else {
                         idents.push(curr_ident.to_owned());
                         curr_ident = String::new();
@@ -76,35 +75,53 @@ fn parse_ref(s: &str, pos: usize) -> Result<(Expr, usize), ParserError> {
     Ok((Expr::Member(idents), pos + inner_pos))
 }
 
-// fn parse_var(s: &str) -> Result<(Expr, Param, &str), ParserError> {
-//     let mut var = String::new();
-//     let mut typ = String::new();
-//     let mut in_var = true;
-//     let mut pos = 0;
-//     for (idx, ch) in s.chars().enumerate() {
-//         pos = idx;
-//         if ch == '>' {
-//             break;
-//         }
-//         if in_var {
-//             if ch == ':' {
-//                 in_var = false;
-//                 continue;
-//             }
-//             var.push(ch);
-//         } else {
-//             typ.push(ch);
-//         }
-//     }
-//     Ok((
-//         Expr::Var(Ident(var.to_string())),
-//         Param {
-//             name: var,
-//             typ: typ,
-//         },
-//         &s[pos..],
-//     ))
-// }
+fn parse_param(s: &str, pos: usize) -> Result<(Expr, Param, usize), ParserError> {
+    let mut var = String::new();
+    let mut typ = String::new();
+    let mut in_var = true;
+    let mut siter = s.chars().skip(pos).enumerate();
+    let inner_pos = loop {
+        if let Some((inner_pos, ch)) = siter.next() {
+            match ch {
+                '>' => {
+                    if var.len() == 0 {
+                        return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos))
+                    }
+                    break inner_pos + 1
+                },
+                ':' => {
+                    if var.len() == 0 {
+                        return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos))
+                    }
+                    if !in_var {
+                        return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos))
+                    }
+                    in_var = false;
+                },
+                _ => {
+                    if in_var {
+                        var.push(ch);
+                    } else {
+                        typ.push(ch);
+                    }
+                }
+            }
+        } else {
+            return Err(ParserError::UnexpectedEOF)
+        }
+    };
+    if !in_var && typ.len() == 0 { // Caught ':' but no succeeding type
+        Err(ParserError::UnexpectedEOF)
+    } else {
+        Ok(
+            (
+                Expr::Var(var.to_owned()),
+                Param{ name: var, typ: if typ.len() == 0 { None } else { Some(typ)} },
+                pos + inner_pos
+            ),
+        )
+    }
+}
 
 fn collect_exprs(mut exprs: Vec<Expr>) -> Result<Expr, ParserError> {
     if exprs.len() == 0 {
@@ -170,10 +187,7 @@ mod tests {
     #[test]
     fn test_parse_ref() {
         let some_ref = "{a.$b.c}";
-        println!("\n*** Parsing {{a.$b.c}}");
         let result = parse_ref(&some_ref, 0);
-        println!("{:?}", result);
-        assert!(result.is_ok());
         let member = (&["a", "$b", "c"]).iter().map(|s| s.to_string()).collect::<Vec<_>>();
         assert_eq!(result.unwrap().0, Expr::Member(member));
     }
@@ -181,30 +195,60 @@ mod tests {
     #[test]
     fn test_parse_ref_malformed() {
         let some_ref = "{.hello}";
-        println!("\n*** Parsing {{.hello}}");
         let result = parse_ref(&some_ref, 0);
         let err = result.err().unwrap();
-        println!("{}", err);
         assert_eq!(err, ParserError::UnexpectedToken('.'.to_string(), 1));
     }
 
     #[test]
     fn test_parse_ref_malformed2() {
         let some_ref = "{hello..world}";
-        println!("\n*** Parsing {{hello..world}}");
         let result = parse_ref(&some_ref, 0);
         let err = result.err().unwrap();
-        println!("{}", err);
         assert_eq!(err, ParserError::UnexpectedToken('.'.to_string(), 7));
     }
 
     #[test]
     fn test_parse_ref_unterminated() {
         let some_ref = "{";
-        println!("\n*** Parsing {{");
         let result = parse_ref(&some_ref, 0);
         let err = result.err().unwrap();
-        println!("{}", err);
+        assert_eq!(err, ParserError::UnexpectedEOF);
+    }
+
+    #[test]
+    fn test_parse_param() {
+        let some_param = "hello:world>";
+        let result = parse_param(&some_param, 0);
+        let (expr, param, pos) = result.unwrap();
+        assert_eq!(expr, Expr::Var("hello".to_string()));
+        assert_eq!(param, Param{ name: "hello".to_string(), typ: Some("world".to_string())});
+        assert_eq!(pos, 12);
+    }
+
+    #[test]
+    fn test_parse_param_no_type() {
+        let some_param = "hello>";
+        let result = parse_param(&some_param, 0);
+        let (expr, param, pos) = result.unwrap();
+        assert_eq!(expr, Expr::Var("hello".to_string()));
+        assert_eq!(param, Param{ name: "hello".to_string(), typ: None});
+        assert_eq!(pos, 6);
+    }
+
+    #[test]
+    fn test_parse_param_no_var() {
+        let some_param = ":world>";
+        let result = parse_param(&some_param, 0);
+        let err = result.err().unwrap();
+        assert_eq!(err, ParserError::UnexpectedToken(':'.to_string(), 0));
+    }
+
+    #[test]
+    fn test_parse_param_colon_no_type() {
+        let some_param = "hello:>";
+        let result = parse_param(&some_param, 0);
+        let err = result.err().unwrap();
         assert_eq!(err, ParserError::UnexpectedEOF);
     }
 
