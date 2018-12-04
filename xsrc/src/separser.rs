@@ -137,48 +137,50 @@ fn collect_exprs(mut exprs: Vec<Expr>) -> Result<Expr, ParserError> {
     }
 }
 
-// fn parse_expr(s: &str) -> Result<(Expr, Vec<Param>), ParserError> {
-//     let mut exprs = Vec::new();
-//     let mut params = Vec::new();
-//     let pos = 0;
-//     let in_s = true;
-//     let siter = s.chars().enumerate();
-//     loop {
-//         if let (pos, ch) = siter.next() {
-//             match ch {
-//                 '\\' => {
-//                     if !in_s {
-//                         return Err(ParserError::TokenError('\\', Pos::Pos(pos)));
-//                     }
-//                     match siter.next() {
-//                         None => return Err(ParserError::UnterminatedEscape(Pos::End)),
-//                         Some(ch) => panic!("TODO"),
-//                     }
-//                 }
-//                 '$' => {
-//                     if in_s {
-//                         in_s = false;
-//                         let (expr, remaining_s0) = parse_member(siter)?;
-//                         exprs.push(expr);
-//                         remaining_s = remaining_s0;
-//                     } else {
-//                         return Err(ParserError::SomeError(""))
-//                     }
-//                 }
-//                 '<' => {
-//                     let (expr, param, remaining_s0) = parse_var(&s[1..])?;
-//                     exprs.push(expr);
-//                     params.push(param);
-//                     remaining_s = remaining_s0;
-//                 }
-//                 _ => {
-//                 }
-//             }
-//         }
-//     }
-//     let result = collect_exprs(exprs)?;
-//     Ok((result, params))
-// }
+pub fn parse_expr(s: &str) -> Result<(Expr, Vec<Param>), ParserError> {
+    let mut exprs = Vec::new();
+    let mut params = Vec::new();
+    let mut siter = s.chars().enumerate().skip(0);
+    let mut curr_str = String::new();
+    loop {
+        if let Some((pos, ch)) = siter.next() {
+            match ch {
+                '$' => {
+                    if curr_str.len() != 0 {
+                        exprs.push(Expr::Lit(curr_str));
+                        curr_str = String::new();
+                    }
+                    let (expr, pos) = parse_ref(s, pos+1)?;
+                    exprs.push(expr);
+                    siter = s.chars().enumerate().skip(pos);
+                },
+                '<' => {
+                    let (expr, param, pos) = parse_param(s, pos + 1)?;
+                    exprs.push(expr);
+                    params.push(param);
+                    siter = s.chars().enumerate().skip(pos);
+                },
+                '\\' => {
+                    if let Some((_, ch)) = siter.next() {
+                        curr_str.push(ch);
+                    } else {
+                        return Err(ParserError::UnexpectedEOF)
+                    }
+                }
+                _ => {
+                    curr_str.push(ch);
+                }
+            }
+        } else {
+            if curr_str.len() != 0 {
+                exprs.push(Expr::Lit(curr_str));
+            }
+            break;
+        }
+    }
+    let result = collect_exprs(exprs)?;
+    Ok((result, params))
+}
 
 #[cfg(test)]
 mod tests {
@@ -252,25 +254,35 @@ mod tests {
         assert_eq!(err, ParserError::UnexpectedEOF);
     }
 
-    // #[test]
-    // fn test_collect_exprs() {
-    //     let exprs = vec![
-    //         Expr::Lit("Hello".to_string()),
-    //         Expr::Var(Ident("World".to_string())),
-    //         Expr::Var(Ident("Xiaosi".to_string())),
-    //     ];
-    //     let expected = Expr::Concat(
-    //         Box::new(Expr::Concat(
-    //             Box::new(Expr::Lit("Hello".to_string())),
-    //             Box::new(Expr::Var(Ident("World".to_string()))),
-    //         )),
-    //         Box::new(Expr::Var(Ident("Xiaosi".to_string()))),
-    //     );
-    //     assert_eq!(collect_exprs(exprs).unwrap(), expected);
-    // }
+    #[test]
+    fn test_collect_exprs() {
+        let exprs = vec![
+            Expr::Lit("Hello".to_string()),
+            Expr::Var("World".to_string()),
+            Expr::Var("Xiaosi".to_string()),
+        ];
+        let expected = Expr::Concat(
+            Box::new(Expr::Concat(
+                Box::new(Expr::Lit("Hello".to_string())),
+                Box::new(Expr::Var("World".to_string())),
+            )),
+            Box::new(Expr::Var("Xiaosi".to_string())),
+        );
+        assert_eq!(collect_exprs(exprs).unwrap(), expected);
+    }
 
-    // #[test]
-    // fn test_parse_expr() {
-    //     let s = "abc${super.def}<id:gg>";
-    // }
+    #[test]
+    fn test_parse_expr() {
+        let s = "abc${super.def}<id:gg>";
+        let result = parse_expr(s);
+        let (expr, params) = result.unwrap();
+        assert_eq!(expr, Expr::Concat(
+            box Expr::Concat(
+                box Expr::Lit("abc".to_string()),
+                box Expr::Member(vec!["super".to_string(), "def".to_string()])
+            ),
+            box Expr::Var("id".to_string())
+        ));
+        assert_eq!(params, vec![Param{ name: "id".to_string(), typ: Some("gg".to_string()) }]);
+    }
 }
