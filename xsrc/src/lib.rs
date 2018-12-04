@@ -7,6 +7,7 @@ extern crate codegen;
 
 pub mod schema;
 pub mod transformer;
+pub mod separser;
 
 #[cfg(test)]
 mod tests {
@@ -22,7 +23,6 @@ mod tests {
         for x in xs.iter() {
             println!("{:?}", *x);
         }
-        
         // println!("{:?}", x);
     }
 }
