@@ -285,4 +285,12 @@ mod tests {
         ));
         assert_eq!(params, vec![Param{ name: "id".to_string(), typ: Some("gg".to_string()) }]);
     }
+
+    #[test]
+    fn test_parse_expr_no_var() {
+        let s = "abc${super.def}<:gg>";
+        let result = parse_expr(s);
+        let err = result.err().unwrap();
+        assert_eq!(err, ParserError::UnexpectedToken(':'.to_string(), 16))
+    }
 }
