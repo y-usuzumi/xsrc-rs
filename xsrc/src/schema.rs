@@ -1,24 +1,37 @@
 use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
 use serde::ser::{Serialize, SerializeMap, Serializer};
 use std::collections::HashMap;
+use std::convert::From;
 use std::fmt;
 use std::fs::File;
 use std::ops::Deref;
 use std::path::Path;
 
-pub enum ParserError{
+pub enum ParserError {
     IOError(std::io::Error),
-    SerdeError(serde_yaml::Error)
+    SerdeError(serde_yaml::Error),
 }
 
 #[derive(Debug)]
-pub struct APIDataMap(HashMap<String, APIData>);
+pub struct APIDataMap(pub HashMap<String, APIData>);
 
 impl Deref for APIDataMap {
     type Target = HashMap<String, APIData>;
 
     fn deref(&self) -> &HashMap<String, APIData> {
         return &self.0;
+    }
+}
+
+impl From<std::io::Error> for ParserError {
+    fn from(e: std::io::Error) -> Self {
+        ParserError::IOError(e)
+    }
+}
+
+impl From<serde_yaml::Error> for ParserError {
+    fn from(e: serde_yaml::Error) -> Self {
+        ParserError::SerdeError(e)
     }
 }
 
@@ -125,39 +138,39 @@ impl APISchema {
     }
 
     fn default_url() -> String {
-        "${super.url}".to_string()
+        "${!super.url}".to_string()
     }
 }
 
 fn parse_file<P: AsRef<Path>>(path: P) -> Result<RootSchema, ParserError> {
-    match File::open(path) {
-        Ok(f) => {
-            match serde_yaml::from_reader(f) {
-                Ok(result) => Ok(result),
-                Err(err) => Err(ParserError::SerdeError(err))
-            }
-        },
-        Err(err) => Err(ParserError::IOError(err))
-    }
+    let f = File::open(path)?;
+    let result = serde_yaml::from_reader(f)?;
+    Ok(result)
 }
 
-fn parse_str() {}
+fn parse_str(s: &str) -> Result<RootSchema, ParserError> {
+    let result = serde_yaml::from_str(s)?;
+    Ok(result)
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct APISetSchema {
-    #[serde(rename = "$url")]
-    pub url: Option<String>,
+    #[serde(rename = "$url", default = "APISetSchema::default_url")]
+    pub url: String,
     #[serde(flatten)]
     pub apisets: APIDataMap,
+}
+
+impl APISetSchema {
+    fn default_url() -> String {
+        "${!super.url}".to_string()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::env;
-    use std::fs::File;
-    use std::io;
-    use std::io::prelude::*;
 
     #[test]
     fn schema_struct_works() {
