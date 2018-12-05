@@ -6,8 +6,8 @@ extern crate serde_yaml;
 extern crate codegen;
 
 pub mod schema;
+pub mod se_parser;
 pub mod transformer;
-pub mod separser;
 
 #[cfg(test)]
 mod tests {

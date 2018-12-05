@@ -3,7 +3,7 @@ use super::schema::{APIData, APIDataMap, RootSchema};
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
-use super::separser::{Expr, Param};
+use super::se_parser::{Expr, Param};
 use self::ContextLookupError::*;
 
 pub struct RootAST {
@@ -91,8 +91,17 @@ impl fmt::Display for ContextValue {
 }
 
 impl Context {
-    fn new(parent: Option<Rc<Context>>) -> Context {
-        panic!("Not implemented")
+    fn new(name: String, parent: Option<Rc<RefCell<Context>>>) -> Context {
+        Context{
+            name,
+            parent,
+            children: HashMap::new(),
+            scope: HashMap::new()
+        }
+    }
+
+    fn add_value(&mut self, key: &str, val: ContextValue) {
+        self.scope.insert(key.to_string(), val);
     }
 
     fn add_child(&mut self, key: &str, ctx: Rc<RefCell<Context>>) {
@@ -139,10 +148,6 @@ impl Context {
                 Err(ContextLookupError::NoSuchMember{ member: (&key[0]).to_string(), context_path: self.path() })
             }
         }
-    }
-
-    pub fn rewrite(&self, expr: &str) -> String {
-        panic!("Not implemented");
     }
 }
 

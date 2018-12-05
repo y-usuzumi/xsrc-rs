@@ -1,8 +1,15 @@
+use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
+use serde::ser::{Serialize, SerializeMap, Serializer};
 use std::collections::HashMap;
 use std::fmt;
+use std::fs::File;
 use std::ops::Deref;
-use serde::ser::{Serialize, Serializer, SerializeMap};
-use serde::de::{Deserialize, Deserializer, Visitor, MapAccess};
+use std::path::Path;
+
+pub enum ParserError{
+    IOError(std::io::Error),
+    SerdeError(serde_yaml::Error)
+}
 
 #[derive(Debug)]
 pub struct APIDataMap(HashMap<String, APIData>);
@@ -58,7 +65,7 @@ impl Serialize for APIDataMap {
             match v {
                 APIData::API(_) => {
                     s.serialize_entry(k, v)?;
-                },
+                }
                 APIData::APISet(_) => {
                     s.serialize_entry(&format!("~{}", k), v)?;
                 }
@@ -75,20 +82,20 @@ impl<'de> Deserialize<'de> for APIDataMap {
     {
         // Instantiate our Visitor and ask the Deserializer to drive
         // it over the input data, resulting in an instance of MyMap.
-        deserializer.deserialize_map(APIDataMapVisitor{})
+        deserializer.deserialize_map(APIDataMapVisitor {})
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RootSchema {
-    #[serde(rename="$url")]
+    #[serde(rename = "$url")]
     pub url: Option<String>,
 
-    #[serde(rename="$as", default="RootSchema::default_klsname")]
+    #[serde(rename = "$as", default = "RootSchema::default_klsname")]
     pub klsname: String,
 
     #[serde(flatten)]
-    pub apisets: APIDataMap
+    pub apisets: APIDataMap,
 }
 
 impl RootSchema {
@@ -100,16 +107,16 @@ impl RootSchema {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum APIData {
     API(APISchema),
-    APISet(APISetSchema)
+    APISet(APISetSchema),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct APISchema {
-    #[serde(rename="$method", default="APISchema::default_method")]
+    #[serde(rename = "$method", default = "APISchema::default_method")]
     pub method: String,
 
-    #[serde(rename="$url", default="APISchema::default_url")]
-    pub url: String
+    #[serde(rename = "$url", default = "APISchema::default_url")]
+    pub url: String,
 }
 
 impl APISchema {
@@ -122,21 +129,35 @@ impl APISchema {
     }
 }
 
+fn parse_file<P: AsRef<Path>>(path: P) -> Result<RootSchema, ParserError> {
+    match File::open(path) {
+        Ok(f) => {
+            match serde_yaml::from_reader(f) {
+                Ok(result) => Ok(result),
+                Err(err) => Err(ParserError::SerdeError(err))
+            }
+        },
+        Err(err) => Err(ParserError::IOError(err))
+    }
+}
+
+fn parse_str() {}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct APISetSchema {
-    #[serde(rename="$url")]
+    #[serde(rename = "$url")]
     pub url: Option<String>,
     #[serde(flatten)]
-    pub apisets: APIDataMap
+    pub apisets: APIDataMap,
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io;
-    use std::io::prelude::*;
+    use super::*;
     use std::env;
     use std::fs::File;
-    use super::*;
+    use std::io;
+    use std::io::prelude::*;
 
     fn load_sample() -> io::Result<String> {
         let mut f = File::open("tests/fixtures/sample.yaml")?;
