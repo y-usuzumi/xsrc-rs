@@ -159,17 +159,10 @@ mod tests {
     use std::io;
     use std::io::prelude::*;
 
-    fn load_sample() -> io::Result<String> {
-        let mut f = File::open("tests/fixtures/sample.yaml")?;
-        let mut content = String::new();
-        f.read_to_string(&mut content)?;
-        Ok(content)
-    }
-
     #[test]
     fn schema_struct_works() {
+        let sample_string = include_str!("../tests/fixtures/sample.yaml");
         println!("{:?}", env::current_dir());
-        let sample_string = load_sample().unwrap();
         let result: Result<RootSchema, _> = serde_yaml::from_str(&sample_string);
         assert!(result.is_ok());
     }
