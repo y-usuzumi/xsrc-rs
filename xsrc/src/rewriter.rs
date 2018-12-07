@@ -400,8 +400,8 @@ pub mod tests {
             RootAST{
                 klsname: "RatinaClient".to_string(),
                 url: ContextValue::Expr(Expr::Concat(
-                    Box::new(Expr::Lit("http://ratina.org/".to_string())),
-                    Box::new(Expr::Var("id".to_string()))
+                    box Expr::Lit("http://ratina.org/".to_string()),
+                    box Expr::Var("id".to_string())
                 )),
                 params: vec![Param{ name: "id".to_string(), typ: Some("int".to_string())}],
                 apisets: hashmap![
@@ -410,11 +410,11 @@ pub mod tests {
                         method: "GET".to_string(),
                         url: ContextValue::Expr(
                             Expr::Concat(
-                                Box::new(Expr::Concat(
-                                    Box::new(Expr::Ref(vec![Member::Super, Member::Member("url".to_string())])),
-                                    Box::new(Expr::Lit("/".to_string()))
-                                )),
-                                Box::new(Expr::Var("ahcroId".to_string()))
+                                box Expr::Concat(
+                                    box Expr::Ref(vec![Member::Super, Member::Member("url".to_string())]),
+                                    box Expr::Lit("/".to_string())
+                                ),
+                                box Expr::Var("ahcroId".to_string())
                             )
                         ),
                         params: vec![Param{ name: "ahcroId".to_string(), typ: Some("uuid".to_string())}],

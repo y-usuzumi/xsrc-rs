@@ -540,7 +540,7 @@ console.log(\"OK\");
         };
         let arrow_func_expr = Expr::ArrowFunc {
             params: vec!["someVar".to_string()],
-            body: Either::Right(Box::new(expr)),
+            body: Either::Right(box expr),
             is_async: true,
         };
         assert_eq!(
@@ -615,17 +615,17 @@ console.log(\"OK\");
         };
         let func_args_2 = vec![Expr::Arith {
             op: ArithOp("+".to_string()),
-            l: Box::new(Expr::Literal {
+            l: box Expr::Literal {
                 val: Literal::Number(3.0),
-            }),
-            r: Box::new(Expr::Literal {
+            },
+            r: box Expr::Literal {
                 val: Literal::Number(4.0),
-            }),
+            },
         }];
         let func_call_2 = Expr::FuncCall {
-            func: Box::new(Expr::Var {
+            func: box Expr::Var {
                 ident: "alert".to_string(),
-            }),
+            },
             args: func_args_2,
         };
         let stmts = vec![
@@ -641,21 +641,21 @@ console.log(\"OK\");
         });
         let chk = Some(Expr::Comp {
             op: CompOp("<".to_string()),
-            l: Box::new(Expr::Var {
+            l: box Expr::Var {
                 ident: "idx".to_string(),
-            }),
-            r: Box::new(Expr::Literal {
+            },
+            r: box Expr::Literal {
                 val: Literal::Number(10.0),
-            }),
+            },
         });
         let incr = Some(Expr::Comp {
             op: CompOp("+=".to_string()),
-            l: Box::new(Expr::Var {
+            l: box Expr::Var {
                 ident: "idx".to_string(),
-            }),
-            r: Box::new(Expr::Literal {
+            },
+            r: box Expr::Literal {
                 val: Literal::Number(1.0),
-            }),
+            },
         });
         let for_loop = Stmt::ForLoop {
             inst,
@@ -677,14 +677,14 @@ alert((3) + (4));
     #[test]
     fn named_export() {
         let stmt = Stmt::Expr{ expr: Expr::Var{ ident: "xiaosi".to_string() } };
-        let export_stmt = Stmt::Export{ is_default: false, stmt: Box::new(stmt) };
+        let export_stmt = Stmt::Export{ is_default: false, stmt: box stmt };
         assert_eq!(export_stmt.gen(&GenContext{}), "export xiaosi;")
     }
 
     fn default_export() {
         let stmt = Stmt::Expr{ expr: Expr::Var{ ident: "xiaosi".to_string() } };
-        let export_stmt = Stmt::Export{ is_default: true, stmt: Box::new(stmt) };
-        assert_eq!(export_stmt.gen(&GenContext{}), "export default xiaosi;")        
+        let export_stmt = Stmt::Export{ is_default: true, stmt: box stmt };
+        assert_eq!(export_stmt.gen(&GenContext{}), "export default xiaosi;")
     }
 
     #[test]
@@ -694,9 +694,9 @@ alert((3) + (4));
             params: vec![Ident("url".to_string()), Ident("params".to_string())],
             stmts: vec![Stmt::Expr {
                 expr: Expr::FuncCall {
-                    func: Box::new(Expr::Var {
+                    func: box Expr::Var {
                         ident: "console.log".to_string(),
-                    }),
+                    },
                     args: vec![Expr::Literal {
                         val: Literal::String("Hello world!".to_string()),
                     }],

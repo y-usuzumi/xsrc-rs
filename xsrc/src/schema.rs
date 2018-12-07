@@ -175,8 +175,14 @@ mod tests {
     #[test]
     fn schema_struct_works() {
         let sample_string = include_str!("../tests/fixtures/sample.yaml");
-        println!("{:?}", env::current_dir());
         let result: Result<RootSchema, _> = serde_yaml::from_str(&sample_string);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn schema_no_root_url_works() {
+        let sample_string = include_str!("../tests/fixtures/sample_no_klsname.yaml");
+        let result: RootSchema = serde_yaml::from_str(&sample_string).unwrap();
+        assert_eq!(result.klsname, "XSClient".to_string());
     }
 }

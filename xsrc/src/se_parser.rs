@@ -136,13 +136,11 @@ fn parse_param(s: &str, pos: usize) -> Result<(Expr, Param, usize), ParserError>
     if !in_var && typ.len() == 0 { // Caught ':' but no succeeding type
         Err(ParserError::UnexpectedEOF)
     } else {
-        Ok(
-            (
-                Expr::Var(var.to_string()),
-                Param{ name: var, typ: if typ.len() == 0 { None } else { Some(typ)} },
-                pos + inner_pos
-            ),
-        )
+        Ok((
+            Expr::Var(var.to_string()),
+            Param{ name: var, typ: if typ.len() == 0 { None } else { Some(typ)} },
+            pos + inner_pos
+        ))
     }
 }
 
@@ -153,7 +151,7 @@ fn collect_exprs(mut exprs: Vec<Expr>) -> Result<Expr, ParserError> {
         // TODO: Fix this ugly code!
         let mut result = exprs.drain(0..1).next().unwrap();
         for expr in exprs.drain(..) {
-            result = Expr::Concat(Box::new(result), Box::new(expr));
+            result = Expr::Concat(box result, box expr);
         }
         Ok(result)
     }
@@ -188,7 +186,9 @@ pub fn parse_expr(s: &str) -> Result<(Expr, Vec<Param>), ParserError> {
                 },
                 '\\' => {
                     if let Some((_, ch)) = siter.next() {
-                        curr_str.push(ch);
+                        match ch {
+                            _ => curr_str.push(ch)  // TODO: Fix this
+                        }
                     } else {
                         return Err(ParserError::UnexpectedEOF)
                     }
@@ -273,6 +273,22 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_param_colon_inside_type() {
+        let some_param = "hello:wor:ld>";
+        let result = parse_param(&some_param, 0);
+        let err = result.err().unwrap();
+        assert_eq!(err, ParserError::UnexpectedToken(':'.to_string(), 9));
+    }
+
+    #[test]
+    fn test_parse_param_unterminated() {
+        let some_param = "hello:world";
+        let result = parse_param(&some_param, 0);
+        let err = result.err().unwrap();
+        assert_eq!(err, ParserError::UnexpectedEOF);
+    }
+
+    #[test]
     fn test_parse_param_colon_no_type() {
         let some_param = "hello:>";
         let result = parse_param(&some_param, 0);
@@ -288,26 +304,35 @@ mod tests {
             Expr::Var("Xiaosi".to_string()),
         ];
         let expected = Expr::Concat(
-            Box::new(Expr::Concat(
-                Box::new(Expr::Lit("Hello".to_string())),
-                Box::new(Expr::Var("World".to_string())),
-            )),
-            Box::new(Expr::Var("Xiaosi".to_string())),
+            box Expr::Concat(
+                box Expr::Lit("Hello".to_string()),
+                box Expr::Var("World".to_string())
+            ),
+            box Expr::Var("Xiaosi".to_string())
         );
         assert_eq!(collect_exprs(exprs).unwrap(), expected);
     }
 
     #[test]
+    fn test_collect_empty_expr() {
+        let exprs = Vec::new();
+        assert_eq!(collect_exprs(exprs).err().unwrap(), ParserError::EmptyExpr);
+    }
+
+    #[test]
     fn test_parse_expr() {
-        let s = "abc${!super.def}<id:gg>";
+        let s = "abc${!super.def}<id:gg>hij";
         let result = parse_expr(s);
         let (expr, params) = result.unwrap();
         assert_eq!(expr, Expr::Concat(
             box Expr::Concat(
-                box Expr::Lit("abc".to_string()),
-                box Expr::Ref(vec![Member::Super, Member::Member("def".to_string())])
+                box Expr::Concat(
+                    box Expr::Lit("abc".to_string()),
+                    box Expr::Ref(vec![Member::Super, Member::Member("def".to_string())])
+                ),
+                box Expr::Var("id".to_string())
             ),
-            box Expr::Var("id".to_string())
+            box Expr::Lit("hij".to_string())
         ));
         assert_eq!(params, vec![Param{ name: "id".to_string(), typ: Some("gg".to_string()) }]);
     }
