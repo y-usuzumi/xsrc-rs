@@ -2,7 +2,7 @@
 use std::fmt;
 use self::ParserError::*;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Lit(String),
     Concat(Box<Expr>, Box<Expr>),
@@ -10,10 +10,19 @@ pub enum Expr {
     Var(String)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Param {
     name: String,
     typ: Option<String>,
+}
+
+impl Param {
+    pub fn new(name: &str, typ: Option<String>) -> Self {
+        Param{
+            name: name.to_string(),
+            typ
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
