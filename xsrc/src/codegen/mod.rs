@@ -6,4 +6,10 @@ pub trait CodeGen {
 
 struct JavaScriptCodeGen {}
 
+impl JavaScriptCodeGen {
+    fn new() -> Self {
+        JavaScriptCodeGen{}
+    }
+}
+
 impl CodeGen for JavaScriptCodeGen {}

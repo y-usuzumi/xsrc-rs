@@ -3,17 +3,23 @@ use std::fmt;
 use self::ParserError::*;
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum Member {
+    Super,
+    Member(String)
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Lit(String),
     Concat(Box<Expr>, Box<Expr>),
-    Member(Vec<String>),
+    Ref(Vec<Member>),
     Var(String)
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Param {
-    name: String,
-    typ: Option<String>,
+    pub name: String,
+    pub typ: Option<String>,
 }
 
 impl Param {
@@ -42,6 +48,14 @@ impl fmt::Display for ParserError {
     }
 }
 
+fn ident_to_member(s: &str) -> Member {
+    if s == "!super" {
+        Member::Super
+    } else {
+        Member::Member(s.to_string())
+    }
+}
+
 fn parse_ref(s: &str, pos: usize) -> Result<(Expr, usize), ParserError> {
     let mut idents = Vec::new();
     let mut siter = s.chars().skip(pos).enumerate();
@@ -61,7 +75,7 @@ fn parse_ref(s: &str, pos: usize) -> Result<(Expr, usize), ParserError> {
                     if curr_ident.len() == 0 {
                         return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos))
                     } else {
-                        idents.push(curr_ident.to_owned());
+                        idents.push(ident_to_member(&curr_ident));
                     }
                     break inner_pos + 1;
                 },
@@ -69,7 +83,7 @@ fn parse_ref(s: &str, pos: usize) -> Result<(Expr, usize), ParserError> {
                     if curr_ident.len() == 0 {
                         return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos))
                     } else {
-                        idents.push(curr_ident.to_owned());
+                        idents.push(ident_to_member(&curr_ident));
                         curr_ident = String::new();
                     }
                 },
@@ -81,7 +95,7 @@ fn parse_ref(s: &str, pos: usize) -> Result<(Expr, usize), ParserError> {
             return Err(ParserError::UnexpectedEOF)
         }
     };
-    Ok((Expr::Member(idents), pos + inner_pos))
+    Ok((Expr::Ref(idents), pos + inner_pos))
 }
 
 fn parse_param(s: &str, pos: usize) -> Result<(Expr, Param, usize), ParserError> {
@@ -124,7 +138,7 @@ fn parse_param(s: &str, pos: usize) -> Result<(Expr, Param, usize), ParserError>
     } else {
         Ok(
             (
-                Expr::Var(var.to_owned()),
+                Expr::Var(var.to_string()),
                 Param{ name: var, typ: if typ.len() == 0 { None } else { Some(typ)} },
                 pos + inner_pos
             ),
@@ -139,8 +153,7 @@ fn collect_exprs(mut exprs: Vec<Expr>) -> Result<Expr, ParserError> {
         // TODO: Fix this ugly code!
         let mut result = exprs.drain(0..1).next().unwrap();
         for expr in exprs.drain(..) {
-            let new_expr = Expr::Concat(Box::new(result), Box::new(expr));
-            result = new_expr;
+            result = Expr::Concat(Box::new(result), Box::new(expr));
         }
         Ok(result)
     }
@@ -164,6 +177,10 @@ pub fn parse_expr(s: &str) -> Result<(Expr, Vec<Param>), ParserError> {
                     siter = s.chars().enumerate().skip(pos);
                 },
                 '<' => {
+                    if curr_str.len() != 0 {
+                        exprs.push(Expr::Lit(curr_str));
+                        curr_str = String::new();
+                    }
                     let (expr, param, pos) = parse_param(s, pos + 1)?;
                     exprs.push(expr);
                     params.push(param);
@@ -199,8 +216,8 @@ mod tests {
     fn test_parse_ref() {
         let some_ref = "{a.$b.c}";
         let result = parse_ref(&some_ref, 0);
-        let member = (&["a", "$b", "c"]).iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        assert_eq!(result.unwrap().0, Expr::Member(member));
+        let member = (&["a", "$b", "c"]).iter().map(|s| Member::Member(s.to_string())).collect::<Vec<_>>();
+        assert_eq!(result.unwrap().0, Expr::Ref(member));
     }
 
     #[test]
@@ -282,13 +299,13 @@ mod tests {
 
     #[test]
     fn test_parse_expr() {
-        let s = "abc${super.def}<id:gg>";
+        let s = "abc${!super.def}<id:gg>";
         let result = parse_expr(s);
         let (expr, params) = result.unwrap();
         assert_eq!(expr, Expr::Concat(
             box Expr::Concat(
                 box Expr::Lit("abc".to_string()),
-                box Expr::Member(vec!["super".to_string(), "def".to_string()])
+                box Expr::Ref(vec![Member::Super, Member::Member("def".to_string())])
             ),
             box Expr::Var("id".to_string())
         ));

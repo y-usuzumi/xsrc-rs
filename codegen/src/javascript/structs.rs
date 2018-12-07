@@ -30,7 +30,7 @@ pub struct Ident(String);
 
 impl Gen for Ident {
     fn gen(&self, _ctx: &GenContext) -> String {
-        return self.0.to_owned();
+        return self.0.to_string();
     }
 }
 
@@ -161,7 +161,7 @@ pub struct CompOp(String);
 
 impl Gen for CompOp {
     fn gen(&self, _ctx: &GenContext) -> String {
-        return self.0.to_owned();
+        return self.0.to_string();
     }
 }
 
@@ -171,7 +171,7 @@ pub struct ArithOp(String);
 
 impl Gen for ArithOp {
     fn gen(&self, _ctx: &GenContext) -> String {
-        return self.0.to_owned();
+        return self.0.to_string();
     }
 }
 
@@ -221,7 +221,7 @@ impl Gen for Expr {
     fn gen(&self, ctx: &GenContext) -> String {
         match self {
             Expr::Literal { val } => val.gen(ctx),
-            Expr::Var { ident } => ident.to_owned(),
+            Expr::Var { ident } => ident.to_string(),
             Expr::Comp { op, l, r } => format!("({}) {} ({})", l.gen(ctx), op.gen(ctx), r.gen(ctx)),
             Expr::Arith { op, l, r } => {
                 format!("({}) {} ({})", l.gen(ctx), op.gen(ctx), r.gen(ctx))
