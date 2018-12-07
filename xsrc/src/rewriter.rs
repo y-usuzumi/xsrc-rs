@@ -389,12 +389,23 @@ pub mod tests {
                 "ahcro".to_string() => APIData::API(APISchema{
                     method: "GET".to_string(),
                     url: "${!super.url}/<ahcroId:uuid>".to_string()
+                }),
+                "ratincren".to_string() => APIData::APISet(APISetSchema{
+                    url: "${!super.url}/ratincren".to_string(),
+                    apisets: APIDataMap(hashmap![
+                        "get".to_string() => APIData::API(APISchema{
+                            method: "GET".to_string(),
+                            url: "${!super.url}/<name:string>".to_string()
+                        })
+                    ])
                 })
             ])
         };
         let root_ast = rewrite(schema).unwrap();
         let root_ctx = Rc::new(RefCell::new(Context::new("RatinaClient", None)));
         let ahcro_ctx = Rc::new(RefCell::new(Context::new("ahcro", Some(root_ctx.clone()))));
+        let ratincren_ctx = Rc::new(RefCell::new(Context::new("ratincren", Some(root_ctx.clone()))));
+        let ratincren_get_ctx = Rc::new(RefCell::new(Context::new("get", Some(ratincren_ctx.clone()))));
         assert_eq!(
             root_ast,
             RootAST{
@@ -419,6 +430,34 @@ pub mod tests {
                         ),
                         params: vec![Param{ name: "ahcroId".to_string(), typ: Some("uuid".to_string())}],
                         context: ahcro_ctx
+                    }),
+                    "ratincren".to_string() => APIDataAST::APISetAST(APISetAST{
+                        name: "ratincren".to_string(),
+                        url: ContextValue::Expr(
+                            Expr::Concat(
+                                box Expr::Ref(vec![Member::Super, Member::Member("url".to_string())]),
+                                box Expr::Lit("/ratincren".to_string())
+                            )
+                        ),
+                        params: Vec::new(),
+                        apisets: hashmap![
+                            "get".to_string() => APIDataAST::APIAST(APIAST{
+                                name: "get".to_string(),
+                                method: "GET".to_string(),
+                                url: ContextValue::Expr(
+                                    Expr::Concat(
+                                        box Expr::Concat(
+                                            box Expr::Ref(vec![Member::Super, Member::Member("url".to_string())]),
+                                            box Expr::Lit("/".to_string())
+                                        ),
+                                        box Expr::Var("name".to_string())
+                                    )
+                                ),
+                                params: vec![Param{ name: "name".to_string(), typ: Some("string".to_string())}],
+                                context: ratincren_get_ctx
+                            })
+                        ],
+                        context: ratincren_ctx
                     })
                 ],
                 context: root_ctx
