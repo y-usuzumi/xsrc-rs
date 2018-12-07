@@ -16,12 +16,12 @@ Tasks:
 - [x] Schema file parser (serde, serde-yaml)
 - [x] String expression parser (separser)
 - [x] Context lookup
-- [ ] Schema -> AST
+- [x] Rewriter
 - Transformers
   - [ ] JavaScript
   - [ ] TypeScript
 - CodeGen
-  - [x] JavaScript
+  - [-] JavaScript
   - [ ] TypeScript
 
 ## 文档（Schema）
