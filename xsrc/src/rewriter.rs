@@ -1,28 +1,28 @@
 use self::ContextLookupError::*;
 use super::schema::{APIData, RootSchema};
-use super::se_parser::{parse_expr, Expr, Param, ParserError};
+use super::se_parser::{parse_expr, Member, Expr, Param, ParserError};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::From;
 use std::fmt;
-use std::iter::FromIterator;
 use std::rc::Rc;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct RootAST {
-    url: Option<String>,
     klsname: String,
+    url: ContextValue,
+    params: Vec<Param>,
     apisets: HashMap<String, APIDataAST>,
     context: Rc<RefCell<Context>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum APIDataAST {
     APIAST(APIAST),
     APISetAST(APISetAST),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct APIAST {
     name: String,
     method: String,
@@ -31,10 +31,11 @@ pub struct APIAST {
     context: Rc<RefCell<Context>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct APISetAST {
     name: String,
     url: ContextValue,
+    params: Vec<Param>,
     apisets: HashMap<String, APIDataAST>,
     context: Rc<RefCell<Context>>,
 }
@@ -107,7 +108,7 @@ impl fmt::Display for ContextLookupError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Context {
     name: String,
     parent: Option<Rc<RefCell<Context>>>,
@@ -117,13 +118,13 @@ pub struct Context {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ContextValue {
-    Expr(Expr, Vec<Param>),
+    Expr(Expr),
 }
 
 impl Context {
-    fn new(name: String, parent: Option<Rc<RefCell<Context>>>) -> Self {
+    fn new(name: &str, parent: Option<Rc<RefCell<Context>>>) -> Self {
         Context {
-            name,
+            name: name.to_string(),
             parent,
             children: HashMap::new(),
             scope: HashMap::new(),
@@ -142,10 +143,10 @@ impl Context {
         match &self.parent {
             Some(ctx) => {
                 let mut ret = ctx.borrow().path().clone();
-                ret.push(self.name.to_owned());
+                ret.push(self.name.to_string());
                 ret
             }
-            None => vec![self.name.to_owned()],
+            None => vec![self.name.to_string()],
         }
     }
 
@@ -195,68 +196,76 @@ impl Context {
     }
 }
 
-fn rewrite_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>) -> APIDataAST {
+fn rewrite_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>) -> Result<APIDataAST, RewriterError> {
     let mut scope = HashMap::new();
     let ctx = Rc::new(RefCell::new(Context {
-        name: name.to_owned(),
+        name: name.to_string(),
         parent: Some(root_ctx),
         children: HashMap::new(),
         scope: scope,
     }));
     match apiset {
         APIData::APISet(schema) => {
-            let children = HashMap::from_iter(
-                schema
-                    .apisets
-                    .iter()
-                    .map(|(k, v)| (k.to_string(), rewrite_apiset(k, v, Rc::clone(&ctx)))),
-            );
-            let (expr, params) = parse_expr(schema.s);
-            APIDataAST::APISetAST(APISetAST {
+            let mut children = HashMap::new();
+            for (k, v) in schema.apisets.iter() {
+                let child = rewrite_apiset(k, v, Rc::clone(&ctx))?;
+                children.insert(k.to_string(), child);
+            }
+            let (expr, params) = parse_expr(&schema.url)?;
+            Ok(APIDataAST::APISetAST(APISetAST {
                 name: name.to_string(),
-                url: ContextValue::Expr(expr, params)
+                url: ContextValue::Expr(expr),
+                params,
                 apisets: children,
                 context: ctx,
-            })
+            }))
         }
-        APIData::API(schema) => APIDataAST::APIAST(APIAST {
-            name: name.to_string(),
-            method: schema.method.to_string(),
-            url: schema.url.to_string(),
-            params: Vec::new(),
-            context: ctx,
-        }),
+        APIData::API(schema) => {
+            let (expr, params) = parse_expr(&schema.url)?;
+            Ok(APIDataAST::APIAST(APIAST {
+                name: name.to_string(),
+                method: schema.method.to_string(),
+                url: ContextValue::Expr(expr),
+                params: params,
+                context: ctx,
+            }))
+        }
     }
 }
 
 pub fn rewrite(source: RootSchema) -> Result<RootAST, RewriterError> {
     let mut scope = HashMap::new();
-    scope.insert("url".to_string(), match source.url {
+    let url: ContextValue;
+    let mut root_params = Vec::new();
+    match source.url {
         Some(ref s) => {
-            let (expr, params) = parse_expr(s)?;
-            ContextValue::Expr(expr, params)
+            let (expr, mut params) = parse_expr(s)?;
+            root_params.append(&mut params);
+            url = ContextValue::Expr(expr);
         },
         None => {
-            ContextValue::Expr(
+            root_params.push(Param::new("url", Some("string".to_string())));
+            url = ContextValue::Expr(
                 Expr::Var("url".to_string()),
-                vec![Param::new("url", Some("string".to_string()))]
-            )
+            );
         }
-    });
+    }
     let root_ctx = Rc::new(RefCell::new(Context {
-        name: (&source).klsname.to_owned(),
+        name: (&source).klsname.to_string(),
         parent: None,
         children: HashMap::new(),
         scope,
     }));
+    let mut apisets = HashMap::new();
+    for (k, v) in source.apisets.iter() {
+        let child = rewrite_apiset(k, v, Rc::clone(&root_ctx))?;
+        apisets.insert(k.to_string(), child);
+    }
     Ok(RootAST {
-        url: source.url,
         klsname: source.klsname,
-        apisets: HashMap::from_iter(
-            (*source.apisets)
-                .iter()
-                .map(|(k, v)| (k.to_string(), rewrite_apiset(k, v, Rc::clone(&root_ctx)))),
-        ),
+        url,
+        params: root_params,
+        apisets: apisets,
         context: Rc::clone(&root_ctx),
     })
 }
@@ -274,8 +283,8 @@ pub mod tests {
             parent: None,
             children: HashMap::new(),
             scope: hashmap![
-                "foo".to_string() => ContextValue::Expr(Expr::Lit("hello".to_string()), Vec::new()),
-                "bar".to_string() => ContextValue::Expr(Expr::Lit("world".to_string()), Vec::new()),
+                "foo".to_string() => ContextValue::Expr(Expr::Lit("hello".to_string())),
+                "bar".to_string() => ContextValue::Expr(Expr::Lit("world".to_string())),
             ],
         }));
         let child1_ctx = Rc::new(RefCell::new(Context {
@@ -283,14 +292,8 @@ pub mod tests {
             parent: Some(root_ctx.clone()),
             children: HashMap::new(),
             scope: hashmap![
-                "foo_child1".to_string() => ContextValue::Expr(
-                    Expr::Lit("hello_child1".to_string()),
-                    Vec::new()
-                ),
-                "bar_child1".to_string() => ContextValue::Expr(
-                    Expr::Lit("world_child1".to_string()),
-                    Vec::new()
-                ),
+                "foo_child1".to_string() => ContextValue::Expr(Expr::Lit("hello_child1".to_string())),
+                "bar_child1".to_string() => ContextValue::Expr(Expr::Lit("world_child1".to_string()))
             ],
         }));
         let child2_ctx = Rc::new(RefCell::new(Context {
@@ -300,11 +303,9 @@ pub mod tests {
             scope: hashmap![
                 "foo_child2".to_string() => ContextValue::Expr(
                     Expr::Lit("hello_child2".to_string()),
-                    Vec::new()
                 ),
                 "bar_child2".to_string() => ContextValue::Expr(
                     Expr::Lit("world_child2".to_string()),
-                    Vec::new()
                 ),
             ],
         }));
@@ -326,7 +327,7 @@ pub mod tests {
             .unwrap();
         assert_eq!(
             result,
-            ContextValue::Expr(Expr::Lit("hello_child1".to_string()), Vec::new())
+            ContextValue::Expr(Expr::Lit("hello_child1".to_string()))
         );
     }
 
@@ -357,7 +358,7 @@ pub mod tests {
             .unwrap();
         assert_eq!(
             result,
-            ContextValue::Expr(Expr::Lit("hello".to_string()), Vec::new())
+            ContextValue::Expr(Expr::Lit("hello".to_string()))
         )
     }
 
@@ -375,23 +376,92 @@ pub mod tests {
             .unwrap();
         assert_eq!(
             result,
-            ContextValue::Expr(Expr::Lit("world_child2".to_string()), Vec::new())
+            ContextValue::Expr(Expr::Lit("world_child2".to_string()))
         )
     }
 
     #[test]
     fn test_rewrite() {
         let schema = RootSchema{
-            url: Some("http://ratina.org/".to_string()),
+            url: Some("http://ratina.org/<id:int>".to_string()),
             klsname: "RatinaClient".to_string(),
             apisets: APIDataMap(hashmap![
                 "ahcro".to_string() => APIData::API(APISchema{
                     method: "GET".to_string(),
-                    url: "${!super.url}".to_string()
+                    url: "${!super.url}/<ahcroId:uuid>".to_string()
+                }),
+                "ratincren".to_string() => APIData::APISet(APISetSchema{
+                    url: "${!super.url}/ratincren".to_string(),
+                    apisets: APIDataMap(hashmap![
+                        "get".to_string() => APIData::API(APISchema{
+                            method: "GET".to_string(),
+                            url: "${!super.url}/<name:string>".to_string()
+                        })
+                    ])
                 })
             ])
         };
         let root_ast = rewrite(schema).unwrap();
-        println!("{:?}", root_ast);
+        let root_ctx = Rc::new(RefCell::new(Context::new("RatinaClient", None)));
+        let ahcro_ctx = Rc::new(RefCell::new(Context::new("ahcro", Some(root_ctx.clone()))));
+        let ratincren_ctx = Rc::new(RefCell::new(Context::new("ratincren", Some(root_ctx.clone()))));
+        let ratincren_get_ctx = Rc::new(RefCell::new(Context::new("get", Some(ratincren_ctx.clone()))));
+        assert_eq!(
+            root_ast,
+            RootAST{
+                klsname: "RatinaClient".to_string(),
+                url: ContextValue::Expr(Expr::Concat(
+                    box Expr::Lit("http://ratina.org/".to_string()),
+                    box Expr::Var("id".to_string())
+                )),
+                params: vec![Param{ name: "id".to_string(), typ: Some("int".to_string())}],
+                apisets: hashmap![
+                    "ahcro".to_string() => APIDataAST::APIAST(APIAST{
+                        name: "ahcro".to_string(),
+                        method: "GET".to_string(),
+                        url: ContextValue::Expr(
+                            Expr::Concat(
+                                box Expr::Concat(
+                                    box Expr::Ref(vec![Member::Super, Member::Member("url".to_string())]),
+                                    box Expr::Lit("/".to_string())
+                                ),
+                                box Expr::Var("ahcroId".to_string())
+                            )
+                        ),
+                        params: vec![Param{ name: "ahcroId".to_string(), typ: Some("uuid".to_string())}],
+                        context: ahcro_ctx
+                    }),
+                    "ratincren".to_string() => APIDataAST::APISetAST(APISetAST{
+                        name: "ratincren".to_string(),
+                        url: ContextValue::Expr(
+                            Expr::Concat(
+                                box Expr::Ref(vec![Member::Super, Member::Member("url".to_string())]),
+                                box Expr::Lit("/ratincren".to_string())
+                            )
+                        ),
+                        params: Vec::new(),
+                        apisets: hashmap![
+                            "get".to_string() => APIDataAST::APIAST(APIAST{
+                                name: "get".to_string(),
+                                method: "GET".to_string(),
+                                url: ContextValue::Expr(
+                                    Expr::Concat(
+                                        box Expr::Concat(
+                                            box Expr::Ref(vec![Member::Super, Member::Member("url".to_string())]),
+                                            box Expr::Lit("/".to_string())
+                                        ),
+                                        box Expr::Var("name".to_string())
+                                    )
+                                ),
+                                params: vec![Param{ name: "name".to_string(), typ: Some("string".to_string())}],
+                                context: ratincren_get_ctx
+                            })
+                        ],
+                        context: ratincren_ctx
+                    })
+                ],
+                context: root_ctx
+            }
+        );
     }
 }

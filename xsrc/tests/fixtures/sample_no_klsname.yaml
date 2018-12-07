@@ -1,0 +1,21 @@
+$url: "http://www.baidu.com/"
+~users:
+  $url: "${!super}/users"
+  all:
+    $url: "${!super}"
+    $method: "GET"
+  get:
+    $url: "${!super}/<id:number>"
+    $params:
+      detail: "boolean|default:true"
+  create:
+    $method: "POST"
+    $data:
+      username: "string"
+      password: "string"
+  update:
+    $url: "${!super}/<id:number>/"
+    $method: "PUT"
+  ~budgets:
+    $url: "${!super}/budgets"
+    all: {}
