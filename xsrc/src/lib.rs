@@ -7,4 +7,4 @@ extern crate codegen;
 
 pub mod schema;
 pub mod se_parser;
-pub mod rewriter;
+pub mod transformer;

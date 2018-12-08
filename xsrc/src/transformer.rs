@@ -8,22 +8,22 @@ use std::fmt;
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq)]
-pub struct RootAST {
+pub struct ContextBoundedRoot {
     klsname: String,
     url: ContextValue,
     params: Vec<Param>,
-    apisets: HashMap<String, APIDataAST>,
+    apisets: HashMap<String, ContextBoundedAPIData>,
     context: Rc<RefCell<Context>>,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum APIDataAST {
-    APIAST(APIAST),
-    APISetAST(APISetAST),
+pub enum ContextBoundedAPIData {
+    API(ContextBoundedAPI),
+    APISet(ContextBoundedAPISet),
 }
 
 #[derive(Debug, PartialEq)]
-pub struct APIAST {
+pub struct ContextBoundedAPI {
     name: String,
     method: String,
     url: ContextValue,
@@ -32,29 +32,29 @@ pub struct APIAST {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct APISetAST {
+pub struct ContextBoundedAPISet {
     name: String,
     url: ContextValue,
     params: Vec<Param>,
-    apisets: HashMap<String, APIDataAST>,
+    apisets: HashMap<String, ContextBoundedAPIData>,
     context: Rc<RefCell<Context>>,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum RewriterError {
+pub enum TransformerError {
     ContextLookupError(ContextLookupError),
     ParserError(ParserError)
 }
 
-impl From<ContextLookupError> for RewriterError {
+impl From<ContextLookupError> for TransformerError {
     fn from(e: ContextLookupError) -> Self {
-        RewriterError::ContextLookupError(e)
+        TransformerError::ContextLookupError(e)
     }
 }
 
-impl From<ParserError> for RewriterError {
+impl From<ParserError> for TransformerError {
     fn from(e: ParserError) -> Self {
-        RewriterError::ParserError(e)
+        TransformerError::ParserError(e)
     }
 }
 
@@ -196,7 +196,7 @@ impl Context {
     }
 }
 
-fn rewrite_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>) -> Result<APIDataAST, RewriterError> {
+fn transform_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>) -> Result<ContextBoundedAPIData, TransformerError> {
     let mut scope = HashMap::new();
     let ctx = Rc::new(RefCell::new(Context {
         name: name.to_string(),
@@ -208,11 +208,11 @@ fn rewrite_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>) 
         APIData::APISet(schema) => {
             let mut children = HashMap::new();
             for (k, v) in schema.apisets.iter() {
-                let child = rewrite_apiset(k, v, Rc::clone(&ctx))?;
+                let child = transform_apiset(k, v, Rc::clone(&ctx))?;
                 children.insert(k.to_string(), child);
             }
             let (expr, params) = parse_expr(&schema.url)?;
-            Ok(APIDataAST::APISetAST(APISetAST {
+            Ok(ContextBoundedAPIData::APISet(ContextBoundedAPISet {
                 name: name.to_string(),
                 url: ContextValue::Expr(expr),
                 params,
@@ -222,7 +222,7 @@ fn rewrite_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>) 
         }
         APIData::API(schema) => {
             let (expr, params) = parse_expr(&schema.url)?;
-            Ok(APIDataAST::APIAST(APIAST {
+            Ok(ContextBoundedAPIData::API(ContextBoundedAPI {
                 name: name.to_string(),
                 method: schema.method.to_string(),
                 url: ContextValue::Expr(expr),
@@ -233,7 +233,7 @@ fn rewrite_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>) 
     }
 }
 
-pub fn rewrite(source: RootSchema) -> Result<RootAST, RewriterError> {
+pub fn transform(source: RootSchema) -> Result<ContextBoundedRoot, TransformerError> {
     let mut scope = HashMap::new();
     let url: ContextValue;
     let mut root_params = Vec::new();
@@ -258,10 +258,10 @@ pub fn rewrite(source: RootSchema) -> Result<RootAST, RewriterError> {
     }));
     let mut apisets = HashMap::new();
     for (k, v) in source.apisets.iter() {
-        let child = rewrite_apiset(k, v, Rc::clone(&root_ctx))?;
+        let child = transform_apiset(k, v, Rc::clone(&root_ctx))?;
         apisets.insert(k.to_string(), child);
     }
-    Ok(RootAST {
+    Ok(ContextBoundedRoot {
         klsname: source.klsname,
         url,
         params: root_params,
@@ -381,7 +381,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_rewrite() {
+    fn test_transform() {
         let schema = RootSchema{
             url: Some("http://ratina.org/<id:int>".to_string()),
             klsname: "RatinaClient".to_string(),
@@ -401,14 +401,14 @@ pub mod tests {
                 })
             ])
         };
-        let root_ast = rewrite(schema).unwrap();
+        let root_ast = transform(schema).unwrap();
         let root_ctx = Rc::new(RefCell::new(Context::new("RatinaClient", None)));
         let ahcro_ctx = Rc::new(RefCell::new(Context::new("ahcro", Some(root_ctx.clone()))));
         let ratincren_ctx = Rc::new(RefCell::new(Context::new("ratincren", Some(root_ctx.clone()))));
         let ratincren_get_ctx = Rc::new(RefCell::new(Context::new("get", Some(ratincren_ctx.clone()))));
         assert_eq!(
             root_ast,
-            RootAST{
+            ContextBoundedRoot{
                 klsname: "RatinaClient".to_string(),
                 url: ContextValue::Expr(Expr::Concat(
                     box Expr::Lit("http://ratina.org/".to_string()),
@@ -416,7 +416,7 @@ pub mod tests {
                 )),
                 params: vec![Param{ name: "id".to_string(), typ: Some("int".to_string())}],
                 apisets: hashmap![
-                    "ahcro".to_string() => APIDataAST::APIAST(APIAST{
+                    "ahcro".to_string() => ContextBoundedAPIData::API(ContextBoundedAPI{
                         name: "ahcro".to_string(),
                         method: "GET".to_string(),
                         url: ContextValue::Expr(
@@ -431,7 +431,7 @@ pub mod tests {
                         params: vec![Param{ name: "ahcroId".to_string(), typ: Some("uuid".to_string())}],
                         context: ahcro_ctx
                     }),
-                    "ratincren".to_string() => APIDataAST::APISetAST(APISetAST{
+                    "ratincren".to_string() => ContextBoundedAPIData::APISet(ContextBoundedAPISet{
                         name: "ratincren".to_string(),
                         url: ContextValue::Expr(
                             Expr::Concat(
@@ -441,7 +441,7 @@ pub mod tests {
                         ),
                         params: Vec::new(),
                         apisets: hashmap![
-                            "get".to_string() => APIDataAST::APIAST(APIAST{
+                            "get".to_string() => ContextBoundedAPIData::API(ContextBoundedAPI{
                                 name: "get".to_string(),
                                 method: "GET".to_string(),
                                 url: ContextValue::Expr(

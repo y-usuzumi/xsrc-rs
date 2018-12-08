@@ -13,14 +13,14 @@ _Work in Progress_
 
 Tasks:
 
-- [x] Schema file parser (serde, serde-yaml)
-- [x] String expression parser (separser)
-- [x] Context lookup
-- [x] Rewriter
-- Transformers
+- [x] Schema file parser (serde, serde-yaml) (which reads a schema file and does necessary validity check)
+- [x] XS expression parser (se_parser) (which parses the XS expression used in urls and such)
+- [x] Context lookup (which provides the capability to look up a member via a path syntax made available by the XS expression parser)
+- [x] Transformer (which calls se_parser and transforms raw schema data structures into context-bounded structures)
+- Rewriters (which rewrites context-bounded data structures into language-specific ASTs)
   - [ ] JavaScript
   - [ ] TypeScript
-- CodeGen
+- CodeGen (renders language-specific ASTs into code)
   - [-] JavaScript
   - [ ] TypeScript
 
