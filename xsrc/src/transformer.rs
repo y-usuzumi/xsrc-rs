@@ -41,20 +41,20 @@ pub struct ContextBoundedAPISet {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum RewriterError {
+pub enum TransformerError {
     ContextLookupError(ContextLookupError),
     ParserError(ParserError)
 }
 
-impl From<ContextLookupError> for RewriterError {
+impl From<ContextLookupError> for TransformerError {
     fn from(e: ContextLookupError) -> Self {
-        RewriterError::ContextLookupError(e)
+        TransformerError::ContextLookupError(e)
     }
 }
 
-impl From<ParserError> for RewriterError {
+impl From<ParserError> for TransformerError {
     fn from(e: ParserError) -> Self {
-        RewriterError::ParserError(e)
+        TransformerError::ParserError(e)
     }
 }
 
@@ -196,7 +196,7 @@ impl Context {
     }
 }
 
-fn rewrite_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>) -> Result<ContextBoundedAPIData, RewriterError> {
+fn transform_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>) -> Result<ContextBoundedAPIData, TransformerError> {
     let mut scope = HashMap::new();
     let ctx = Rc::new(RefCell::new(Context {
         name: name.to_string(),
@@ -208,7 +208,7 @@ fn rewrite_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>) 
         APIData::APISet(schema) => {
             let mut children = HashMap::new();
             for (k, v) in schema.apisets.iter() {
-                let child = rewrite_apiset(k, v, Rc::clone(&ctx))?;
+                let child = transform_apiset(k, v, Rc::clone(&ctx))?;
                 children.insert(k.to_string(), child);
             }
             let (expr, params) = parse_expr(&schema.url)?;
@@ -233,7 +233,7 @@ fn rewrite_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>) 
     }
 }
 
-pub fn rewrite(source: RootSchema) -> Result<ContextBoundedRoot, RewriterError> {
+pub fn transform(source: RootSchema) -> Result<ContextBoundedRoot, TransformerError> {
     let mut scope = HashMap::new();
     let url: ContextValue;
     let mut root_params = Vec::new();
@@ -258,7 +258,7 @@ pub fn rewrite(source: RootSchema) -> Result<ContextBoundedRoot, RewriterError> 
     }));
     let mut apisets = HashMap::new();
     for (k, v) in source.apisets.iter() {
-        let child = rewrite_apiset(k, v, Rc::clone(&root_ctx))?;
+        let child = transform_apiset(k, v, Rc::clone(&root_ctx))?;
         apisets.insert(k.to_string(), child);
     }
     Ok(ContextBoundedRoot {
@@ -381,7 +381,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_rewrite() {
+    fn test_transform() {
         let schema = RootSchema{
             url: Some("http://ratina.org/<id:int>".to_string()),
             klsname: "RatinaClient".to_string(),
@@ -401,7 +401,7 @@ pub mod tests {
                 })
             ])
         };
-        let root_ast = rewrite(schema).unwrap();
+        let root_ast = transform(schema).unwrap();
         let root_ctx = Rc::new(RefCell::new(Context::new("RatinaClient", None)));
         let ahcro_ctx = Rc::new(RefCell::new(Context::new("ahcro", Some(root_ctx.clone()))));
         let ratincren_ctx = Rc::new(RefCell::new(Context::new("ratincren", Some(root_ctx.clone()))));
