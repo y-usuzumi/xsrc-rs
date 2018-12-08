@@ -7,6 +7,7 @@ use std::fs::File;
 use std::ops::Deref;
 use std::path::Path;
 
+#[derive(Debug)]
 pub enum ParserError {
     IOError(std::io::Error),
     SerdeError(serde_yaml::Error),
@@ -142,13 +143,13 @@ impl APISchema {
     }
 }
 
-fn parse_file<P: AsRef<Path>>(path: P) -> Result<RootSchema, ParserError> {
+pub fn parse_file<P: AsRef<Path>>(path: P) -> Result<RootSchema, ParserError> {
     let f = File::open(path)?;
     let result = serde_yaml::from_reader(f)?;
     Ok(result)
 }
 
-fn parse_str(s: &str) -> Result<RootSchema, ParserError> {
+pub fn parse_str(s: &str) -> Result<RootSchema, ParserError> {
     let result = serde_yaml::from_str(s)?;
     Ok(result)
 }

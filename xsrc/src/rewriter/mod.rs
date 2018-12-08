@@ -1,15 +1,7 @@
-use super::parser::AST;
+use super::transformer::ContextBoundedRoot;
+
+pub mod javascript;
 
 pub trait CodeGen {
-    fn gen(&self, ast: AST) -> String;
+    fn gen(&self, root: ContextBoundedRoot);
 }
-
-struct JavaScriptCodeGen {}
-
-impl JavaScriptCodeGen {
-    fn new() -> Self {
-        JavaScriptCodeGen{}
-    }
-}
-
-impl CodeGen for JavaScriptCodeGen {}
