@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn schema_no_root_url_works() {
-        let sample_string = include_str!("../tests/fixtures/sample_no_klsname.yaml");
+        let sample_string = include_str!("../tests/fixtures/sample_no_klsname_no_url.yaml");
         let result: RootSchema = serde_yaml::from_str(&sample_string).unwrap();
         assert_eq!(result.klsname, "XSClient".to_string());
     }

@@ -1,4 +1,3 @@
-$url: "http://www.baidu.com/"
 ~users:
   $url: "${!super}/users"
   all:

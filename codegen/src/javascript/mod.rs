@@ -70,15 +70,15 @@ impl Gen for Decl {
 #[derive(Debug)]
 pub struct Assign {
     pub typ: Option<DeclType>,
-    pub ident: Ident,
+    pub assignee: Expr,
     pub expr: Expr,
 }
 
 impl Gen for Assign {
     fn gen(&self, ctx: &GenContext) -> String {
         match self.typ {
-            Some(ref typ) => format!("{} {} = {}", typ, self.ident.gen(ctx), self.expr.gen(ctx)),
-            None => format!("{} = {}", self.ident.gen(ctx), self.expr.gen(ctx)),
+            Some(ref typ) => format!("{} {} = {}", typ, self.assignee.gen(ctx), self.expr.gen(ctx)),
+            None => format!("{} = {}", self.assignee.gen(ctx), self.expr.gen(ctx)),
         }
     }
 }
@@ -105,7 +105,7 @@ pub enum Stmt {
     Class(Class),
     Export {
         is_default: bool,
-        stmt: Box<Stmt>
+        stmt: Box<Stmt>,
     },
 }
 
@@ -145,17 +145,15 @@ for ({inst}; {chk}; {incr}) {{
                 } else {
                     format!("export {}", stmt.gen(ctx))
                 }
-            },
-            Stmt::Class(kls) => {
-                kls.gen(ctx)
             }
+            Stmt::Class(kls) => kls.gen(ctx),
         }
     }
 }
 
 // TODO: Expand this type
 #[derive(Debug)]
-pub struct CompOp(String);
+pub struct CompOp(pub String);
 
 impl Gen for CompOp {
     fn gen(&self, _ctx: &GenContext) -> String {
@@ -165,7 +163,7 @@ impl Gen for CompOp {
 
 // TODO: Expand this type
 #[derive(Debug)]
-pub struct ArithOp(String);
+pub struct ArithOp(pub String);
 
 impl Gen for ArithOp {
     fn gen(&self, _ctx: &GenContext) -> String {
@@ -190,6 +188,10 @@ pub enum Expr {
         op: ArithOp,
         l: Box<Expr>,
         r: Box<Expr>,
+    },
+    Member {
+        base: Box<Expr>,
+        member: Ident,
     },
     // someFunc("OK", 123)
     FuncCall {
@@ -220,6 +222,7 @@ impl Gen for Expr {
             Expr::Arith { op, l, r } => {
                 format!("({}) {} ({})", l.gen(ctx), op.gen(ctx), r.gen(ctx))
             }
+            Expr::Member { base, member } => format!("({}).{}", base.gen(ctx), member.gen(ctx)),
             Expr::FuncCall { func, args } => {
                 let rendered_args = args
                     .iter()
@@ -376,7 +379,7 @@ pub struct Class {
     pub extends: Option<Ident>,
     pub constructor: Option<Constructor>,
     pub methods: Vec<Method>,
-    pub getters: Vec<Getter>
+    pub getters: Vec<Getter>,
 }
 
 impl Gen for Class {
@@ -399,7 +402,11 @@ class {ident} {extends}{{
                 Some(c) => format!("extends {} ", c.gen(ctx)),
                 None => String::new(),
             },
-            decls = rendered_decls.iter().map(|decl| format!("{}\n", decl)).collect::<Vec<String>>().join(""),
+            decls = rendered_decls
+                .iter()
+                .map(|decl| format!("{}\n", decl))
+                .collect::<Vec<String>>()
+                .join(""),
         )
     }
 }
@@ -459,7 +466,7 @@ impl Gen for Import {
 }
 
 pub struct Code {
-    pub stmts: Vec<Stmt>
+    pub stmts: Vec<Stmt>,
 }
 
 impl Gen for Code {
@@ -491,12 +498,25 @@ mod tests {
     }
 
     #[test]
+    fn member_expr() {
+        let ctx = GenContext {};
+        let member_expr = Expr::Member {
+            base: box Expr::Member {
+                base: box Expr::Var("this".to_string()),
+                member: Ident("hello".to_string()),
+            },
+            member: Ident("world".to_string()),
+        };
+        assert_eq!(member_expr.gen(&ctx), "((this).hello).world");
+    }
+
+    #[test]
     fn func_call_expr() {
         let ctx = GenContext {};
         let func_call_expr = Expr::FuncCall {
             // TODO: Improper use of `Var`
             func: box Expr::Var("console.log".to_string()),
-            args: vec![Expr::Var("someVar".to_string())]
+            args: vec![Expr::Var("someVar".to_string())],
         };
         assert_eq!(func_call_expr.gen(&ctx), "console.log(someVar)");
     }
@@ -504,13 +524,11 @@ mod tests {
     #[test]
     fn func_expr() {
         let ctx = GenContext {};
-        let stmt = Stmt::Expr(
-            Expr::FuncCall {
-                // TODO: Improper use of `Var`
-                func: box Expr::Var("console.log".to_string()),
-                args: vec![Expr::Literal(Literal::String("OK".to_string()))]
-            }
-        );
+        let stmt = Stmt::Expr(Expr::FuncCall {
+            // TODO: Improper use of `Var`
+            func: box Expr::Var("console.log".to_string()),
+            args: vec![Expr::Literal(Literal::String("OK".to_string()))],
+        });
         let func_expr = Expr::Func {
             ident: "myFunc".to_string(),
             params: vec!["someVar".to_string()],
@@ -532,7 +550,7 @@ console.log(\"OK\");
         let expr = Expr::FuncCall {
             // TODO: Improper use of `Var`
             func: box Expr::Var("console.log".to_string()),
-            args: vec![Expr::Literal(Literal::String("OK".to_string()))]
+            args: vec![Expr::Literal(Literal::String("OK".to_string()))],
         };
         let arrow_func_expr = Expr::ArrowFunc {
             params: vec!["someVar".to_string()],
@@ -553,7 +571,7 @@ console.log(\"OK\");
         // TODO: Improper use of `Var` here
         let expr = Expr::FuncCall {
             func: box Expr::Var("console.log".to_string()),
-            args: vec![Expr::Literal(Literal::String("OK".to_string()))]
+            args: vec![Expr::Literal(Literal::String("OK".to_string()))],
         };
         let expr_stmt = Stmt::Expr(expr);
         assert_eq!(expr_stmt.gen(&ctx), "console.log(\"OK\");")
@@ -562,12 +580,10 @@ console.log(\"OK\");
     #[test]
     fn decl_stmt() {
         let ctx = GenContext {};
-        let stmt = Stmt::Decl(
-            Decl {
-                typ: DeclType::Const,
-                ident: Ident("hello".to_string()),
-            }
-        );
+        let stmt = Stmt::Decl(Decl {
+            typ: DeclType::Const,
+            ident: Ident("hello".to_string()),
+        });
         assert_eq!(stmt.gen(&ctx), "const hello;");
     }
 
@@ -577,15 +593,13 @@ console.log(\"OK\");
         let func_call = Expr::FuncCall {
             // TODO: Improper use of `Var` here
             func: box Expr::Var("console.log".to_string()),
-            args: vec![Expr::Literal(Literal::String("OK".to_string()))]
+            args: vec![Expr::Literal(Literal::String("OK".to_string()))],
         };
-        let global_assign_stmt = Stmt::Assign(
-            Assign {
-                typ: None,
-                ident: Ident("hello".to_string()),
-                expr: func_call,
-            }
-        );
+        let global_assign_stmt = Stmt::Assign(Assign {
+            typ: None,
+            assignee: Expr::Var("hello".to_string()),
+            expr: func_call,
+        });
         assert_eq!(global_assign_stmt.gen(&ctx), "hello = console.log(\"OK\");")
     }
 
@@ -595,35 +609,32 @@ console.log(\"OK\");
         let func_call_1 = Expr::FuncCall {
             // TODO: Improper use of `Var` here
             func: box Expr::Var("console.log".to_string()),
-            args: vec![Expr::Literal(Literal::String("OK".to_string()))]
+            args: vec![Expr::Literal(Literal::String("OK".to_string()))],
         };
         let func_args_2 = vec![Expr::Arith {
             op: ArithOp("+".to_string()),
             l: box Expr::Literal(Literal::Number(3.0)),
-            r: box Expr::Literal(Literal::Number(4.0))
+            r: box Expr::Literal(Literal::Number(4.0)),
         }];
         let func_call_2 = Expr::FuncCall {
             func: box Expr::Var("alert".to_string()),
             args: func_args_2,
         };
-        let stmts = vec![
-            Stmt::Expr(func_call_1),
-            Stmt::Expr(func_call_2)
-        ];
+        let stmts = vec![Stmt::Expr(func_call_1), Stmt::Expr(func_call_2)];
         let inst = Some(Assign {
             typ: Some(DeclType::Let),
-            ident: Ident("idx".to_string()),
-            expr: Expr::Literal(Literal::Number(3.0))
+            assignee: Expr::Var("idx".to_string()),
+            expr: Expr::Literal(Literal::Number(3.0)),
         });
         let chk = Some(Expr::Comp {
             op: CompOp("<".to_string()),
             l: box Expr::Var("idx".to_string()),
-            r: box Expr::Literal(Literal::Number(10.0))
+            r: box Expr::Literal(Literal::Number(10.0)),
         });
         let incr = Some(Expr::Comp {
             op: CompOp("+=".to_string()),
             l: box Expr::Var("idx".to_string()),
-            r: box Expr::Literal(Literal::Number(1.0))
+            r: box Expr::Literal(Literal::Number(1.0)),
         });
         let for_loop = Stmt::ForLoop {
             inst,
@@ -645,14 +656,20 @@ alert((3) + (4));
     #[test]
     fn named_export() {
         let stmt = Stmt::Expr(Expr::Var("xiaosi".to_string()));
-        let export_stmt = Stmt::Export{ is_default: false, stmt: box stmt };
-        assert_eq!(export_stmt.gen(&GenContext{}), "export xiaosi;")
+        let export_stmt = Stmt::Export {
+            is_default: false,
+            stmt: box stmt,
+        };
+        assert_eq!(export_stmt.gen(&GenContext {}), "export xiaosi;")
     }
 
     fn default_export() {
         let stmt = Stmt::Expr(Expr::Var("xiaosi".to_string()));
-        let export_stmt = Stmt::Export{ is_default: true, stmt: box stmt };
-        assert_eq!(export_stmt.gen(&GenContext{}), "export default xiaosi;")
+        let export_stmt = Stmt::Export {
+            is_default: true,
+            stmt: box stmt,
+        };
+        assert_eq!(export_stmt.gen(&GenContext {}), "export default xiaosi;")
     }
 
     #[test]
@@ -660,12 +677,10 @@ alert((3) + (4));
         let ident = Ident("XiaoSi".to_string());
         let constructor = Constructor {
             params: vec![Ident("url".to_string()), Ident("params".to_string())],
-            stmts: vec![Stmt::Expr(
-                Expr::FuncCall {
-                    func: box Expr::Var("console.log".to_string()),
-                    args: vec![Expr::Literal(Literal::String("Hello world!".to_string()))]
-                }
-            )],
+            stmts: vec![Stmt::Expr(Expr::FuncCall {
+                func: box Expr::Var("console.log".to_string()),
+                args: vec![Expr::Literal(Literal::String("Hello world!".to_string()))],
+            })],
         };
         let methods = vec![Method {
             ident: Ident("loves".to_string()),
@@ -675,7 +690,7 @@ alert((3) + (4));
         }];
         let getters = vec![Getter {
             ident: Ident("age".to_string()),
-            stmts: vec![Stmt::Return(Expr::Literal(Literal::Number(23.0)))]
+            stmts: vec![Stmt::Return(Expr::Literal(Literal::Number(23.0)))],
         }];
         let xiaosi_class = Class {
             ident,
@@ -724,7 +739,7 @@ return 23;
                 ImportName::Simple(Ident("alpha".to_string())),
                 ImportName::Alias(Ident("beta".to_string()), Ident("bravo".to_string())),
             ])),
-            path: "xiaosi".to_string()
+            path: "xiaosi".to_string(),
         };
         assert_eq!(
             "\
@@ -750,22 +765,20 @@ return 23;
     #[test]
     fn xiaosi_code() {
         let stmts = vec![
-            Stmt::Import(Import{
+            Stmt::Import(Import {
                 def: Some(Ident("Hello".to_string())),
                 imps: Some(Left(ImportStar())),
-                path: "hello".to_string()
+                path: "hello".to_string(),
             }),
-            Stmt::Class(Class{
+            Stmt::Class(Class {
                 ident: Ident("XiaoSi".to_string()),
                 extends: None,
                 constructor: None,
                 methods: Vec::new(),
-                getters: Vec::new()
-            })
+                getters: Vec::new(),
+            }),
         ];
-        let code = Code {
-            stmts: stmts
-        };
-        println!("{}", code.gen(&GenContext{}));
+        let code = Code { stmts: stmts };
+        println!("{}", code.gen(&GenContext {}));
     }
 }
