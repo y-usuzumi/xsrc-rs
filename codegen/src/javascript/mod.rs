@@ -181,36 +181,40 @@ pub enum Expr {
     Comp {
         op: CompOp,
         l: Box<Expr>,
-        r: Box<Expr>,
+        r: Box<Expr>
     },
     // a + b
     Arith {
         op: ArithOp,
         l: Box<Expr>,
-        r: Box<Expr>,
+        r: Box<Expr>
     },
     Member {
         base: Box<Expr>,
-        member: Ident,
+        member: Ident
     },
     // someFunc("OK", 123)
     FuncCall {
         func: Box<Expr>,
-        args: Vec<Expr>,
+        args: Vec<Expr>
     },
     // (function (p1, p2) { ... })
     Func {
         ident: String,
         params: Vec<String>,
         stmts: Vec<Stmt>,
-        is_async: bool,
+        is_async: bool
     },
     // (p1, p2) => { ... }
     ArrowFunc {
         params: Vec<String>,
         body: Either<Vec<Stmt>, Box<Expr>>,
-        is_async: bool,
+        is_async: bool
     },
+    Instantiate {
+        constructor: Box<Expr>,
+        args: Vec<Expr>
+    }
 }
 
 impl Gen for Expr {
@@ -284,6 +288,14 @@ impl Gen for Expr {
                         expr = expr.gen(ctx)
                     ),
                 }
+            },
+            Expr::Instantiate{ constructor, args } => {
+                let rendered_args = args
+                    .iter()
+                    .map(|v| v.gen(ctx))
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                format!("new ({})({})", constructor.gen(ctx), rendered_args)
             }
         }
     }
@@ -321,10 +333,10 @@ constructor({params}) {{
 
 #[derive(Debug)]
 pub struct Method {
-    ident: Ident,
-    params: Vec<String>,
-    stmts: Vec<Stmt>,
-    is_async: bool,
+    pub ident: Ident,
+    pub params: Vec<String>,
+    pub stmts: Vec<Stmt>,
+    pub is_async: bool,
 }
 
 impl Gen for Method {
@@ -350,8 +362,8 @@ impl Gen for Method {
 
 #[derive(Debug)]
 pub struct Getter {
-    ident: Ident,
-    stmts: Vec<Stmt>,
+    pub ident: Ident,
+    pub stmts: Vec<Stmt>,
 }
 
 impl Gen for Getter {
