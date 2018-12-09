@@ -1,6 +1,7 @@
 use self::ContextLookupError::*;
 use super::schema::{APIData, RootSchema};
-use super::se_parser::{parse_expr, Member, Expr, Param, ParserError};
+use super::se_parser::{parse_expr, Member, Expr, ParserError};
+pub use super::se_parser::Param;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::From;
@@ -9,11 +10,11 @@ use std::rc::Rc;
 
 #[derive(Debug, PartialEq)]
 pub struct ContextBoundedRoot {
-    klsname: String,
-    url: ContextValue,
-    params: Vec<Param>,
-    apisets: HashMap<String, ContextBoundedAPIData>,
-    context: Rc<RefCell<Context>>,
+    pub klsname: String,
+    pub url: ContextValue,
+    pub params: Vec<Param>,
+    pub apisets: HashMap<String, ContextBoundedAPIData>,
+    pub context: Rc<RefCell<Context>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -24,20 +25,20 @@ pub enum ContextBoundedAPIData {
 
 #[derive(Debug, PartialEq)]
 pub struct ContextBoundedAPI {
-    name: String,
-    method: String,
-    url: ContextValue,
-    params: Vec<Param>,
-    context: Rc<RefCell<Context>>,
+    pub name: String,
+    pub method: String,
+    pub url: ContextValue,
+    pub params: Vec<Param>,
+    pub context: Rc<RefCell<Context>>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ContextBoundedAPISet {
-    name: String,
-    url: ContextValue,
-    params: Vec<Param>,
-    apisets: HashMap<String, ContextBoundedAPIData>,
-    context: Rc<RefCell<Context>>,
+    pub name: String,
+    pub url: ContextValue,
+    pub params: Vec<Param>,
+    pub apisets: HashMap<String, ContextBoundedAPIData>,
+    pub context: Rc<RefCell<Context>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -234,7 +235,7 @@ fn transform_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>
 }
 
 pub fn transform(source: RootSchema) -> Result<ContextBoundedRoot, TransformerError> {
-    let mut scope = HashMap::new();
+    let scope = HashMap::new();
     let url: ContextValue;
     let mut root_params = Vec::new();
     match source.url {

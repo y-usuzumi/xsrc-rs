@@ -7,6 +7,7 @@ use std::fs::File;
 use std::ops::Deref;
 use std::path::Path;
 
+#[derive(Debug)]
 pub enum ParserError {
     IOError(std::io::Error),
     SerdeError(serde_yaml::Error),
@@ -142,13 +143,13 @@ impl APISchema {
     }
 }
 
-fn parse_file<P: AsRef<Path>>(path: P) -> Result<RootSchema, ParserError> {
+pub fn parse_file<P: AsRef<Path>>(path: P) -> Result<RootSchema, ParserError> {
     let f = File::open(path)?;
     let result = serde_yaml::from_reader(f)?;
     Ok(result)
 }
 
-fn parse_str(s: &str) -> Result<RootSchema, ParserError> {
+pub fn parse_str(s: &str) -> Result<RootSchema, ParserError> {
     let result = serde_yaml::from_str(s)?;
     Ok(result)
 }
@@ -170,7 +171,6 @@ impl APISetSchema {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
 
     #[test]
     fn schema_struct_works() {
@@ -181,7 +181,7 @@ mod tests {
 
     #[test]
     fn schema_no_root_url_works() {
-        let sample_string = include_str!("../tests/fixtures/sample_no_klsname.yaml");
+        let sample_string = include_str!("../tests/fixtures/sample_no_klsname_no_url.yaml");
         let result: RootSchema = serde_yaml::from_str(&sample_string).unwrap();
         assert_eq!(result.klsname, "XSClient".to_string());
     }
