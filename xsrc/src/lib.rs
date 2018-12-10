@@ -7,6 +7,7 @@ extern crate serde_yaml;
 #[macro_use]
 extern crate serde_derive;
 extern crate codegen;
+extern crate linked_hash_map;
 
 pub mod rewriter;
 pub mod schema;

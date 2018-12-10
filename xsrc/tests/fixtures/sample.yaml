@@ -22,8 +22,8 @@ $as: "XiaoSiClient"
     $url: "${!super}/<id:number>"
     # URL中?后面的参数，也会提取为API参数
     $params:
-      # 竖线后面的部分可省略。目前仅支持默认值
-      detail: "boolean|default:true"
+      # TODO: 竖线后面包括扩展选项如默认值。
+      detail: "boolean"
   # await result = usersAPI.create("小四", "就不告诉你");
   create:
     $method: "POST"

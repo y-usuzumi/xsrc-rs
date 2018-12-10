@@ -1,8 +1,64 @@
+use std::collections::HashMap;
 use super::utils::Either;
 use super::utils::Either::*;
+use std::default::Default;
 use std::fmt;
 
-pub struct GenContext {}
+fn indent(ctx: &GenContext, s: &str) -> String {
+    match ctx.pretty {
+        None => s.to_string(),
+        Some(PrettyOptions { ref indent }) => {
+            s
+                .split("\n").map(|l| format!("{}{}", indent, l))
+                .collect::<Vec<String>>()
+                .join("\n")
+        },
+    }
+}
+
+#[derive(Debug)]
+pub struct PrettyOptions {
+    indent: String,
+}
+
+impl PrettyOptions {
+    pub fn new() -> Self {
+        PrettyOptions {
+            indent: String::new(),
+        }
+    }
+}
+
+impl Default for PrettyOptions {
+    fn default() -> Self {
+        PrettyOptions {
+            indent: "    ".to_string(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct GenContext {
+    pretty: Option<PrettyOptions>,
+}
+
+impl GenContext {
+    pub fn new() -> Self {
+        GenContext { pretty: None }
+    }
+
+    pub fn set_pretty_options(&mut self, pretty_options: PrettyOptions) {
+        self.pretty = Some(pretty_options)
+    }
+}
+
+impl Default for GenContext {
+    fn default() -> Self {
+        GenContext {
+            pretty: Some(Default::default())
+        }
+    }
+}
 
 pub trait Gen {
     fn gen(&self, _ctx: &GenContext) -> String;
@@ -77,7 +133,12 @@ pub struct Assign {
 impl Gen for Assign {
     fn gen(&self, ctx: &GenContext) -> String {
         match self.typ {
-            Some(ref typ) => format!("{} {} = {}", typ, self.assignee.gen(ctx), self.expr.gen(ctx)),
+            Some(ref typ) => format!(
+                "{} {} = {}",
+                typ,
+                self.assignee.gen(ctx),
+                self.expr.gen(ctx)
+            ),
             None => format!("{} = {}", self.assignee.gen(ctx), self.expr.gen(ctx)),
         }
     }
@@ -123,7 +184,7 @@ impl Gen for Stmt {
             } => {
                 let rendered_stmts = stmts
                     .iter()
-                    .map(|v| v.gen(ctx))
+                    .map(|v| indent(ctx, &v.gen(ctx)))
                     .collect::<Vec<String>>()
                     .join("\n");
                 format!(
@@ -177,44 +238,46 @@ pub enum Expr {
     Literal(Literal),
     // a
     Var(String),
+    // object
+    Object(HashMap<String, Expr>),
     // a > b
     Comp {
         op: CompOp,
         l: Box<Expr>,
-        r: Box<Expr>
+        r: Box<Expr>,
     },
     // a + b
     Arith {
         op: ArithOp,
         l: Box<Expr>,
-        r: Box<Expr>
+        r: Box<Expr>,
     },
     Member {
         base: Box<Expr>,
-        member: Ident
+        member: Ident,
     },
     // someFunc("OK", 123)
     FuncCall {
         func: Box<Expr>,
-        args: Vec<Expr>
+        args: Vec<Expr>,
     },
     // (function (p1, p2) { ... })
     Func {
         ident: String,
         params: Vec<String>,
         stmts: Vec<Stmt>,
-        is_async: bool
+        is_async: bool,
     },
     // (p1, p2) => { ... }
     ArrowFunc {
         params: Vec<String>,
         body: Either<Vec<Stmt>, Box<Expr>>,
-        is_async: bool
+        is_async: bool,
     },
     Instantiate {
         constructor: Box<Expr>,
-        args: Vec<Expr>
-    }
+        args: Vec<Expr>,
+    },
 }
 
 impl Gen for Expr {
@@ -222,6 +285,7 @@ impl Gen for Expr {
         match self {
             Expr::Literal(val) => val.gen(ctx),
             Expr::Var(ident) => ident.to_string(),
+            Expr::Object(obj) => panic!("Not implemented yet"),
             Expr::Comp { op, l, r } => format!("({}) {} ({})", l.gen(ctx), op.gen(ctx), r.gen(ctx)),
             Expr::Arith { op, l, r } => {
                 format!("({}) {} ({})", l.gen(ctx), op.gen(ctx), r.gen(ctx))
@@ -243,7 +307,7 @@ impl Gen for Expr {
             } => {
                 let rendered_stmts = stmts
                     .iter()
-                    .map(|v| v.gen(ctx))
+                    .map(|v| indent(&ctx, &v.gen(ctx)))
                     .collect::<Vec<String>>()
                     .join("\n");
                 format!(
@@ -267,7 +331,7 @@ impl Gen for Expr {
                     Left(stmts) => {
                         let rendered_stmts = stmts
                             .iter()
-                            .map(|v| v.gen(ctx))
+                            .map(|v| indent(&ctx, &v.gen(ctx)))
                             .collect::<Vec<String>>()
                             .join("\n");
                         format!(
@@ -288,8 +352,8 @@ impl Gen for Expr {
                         expr = expr.gen(ctx)
                     ),
                 }
-            },
-            Expr::Instantiate{ constructor, args } => {
+            }
+            Expr::Instantiate { constructor, args } => {
                 let rendered_args = args
                     .iter()
                     .map(|v| v.gen(ctx))
@@ -312,7 +376,7 @@ impl Gen for Constructor {
         let rendered_stmts = self
             .stmts
             .iter()
-            .map(|v| v.gen(ctx))
+            .map(|v| indent(&ctx, &v.gen(ctx)))
             .collect::<Vec<String>>()
             .join("\n");
         format!(
@@ -344,7 +408,7 @@ impl Gen for Method {
         let rendered_stmts = self
             .stmts
             .iter()
-            .map(|v| v.gen(ctx))
+            .map(|v| indent(&ctx, &v.gen(ctx)))
             .collect::<Vec<String>>()
             .join("\n");
         format!(
@@ -371,7 +435,7 @@ impl Gen for Getter {
         let rendered_stmts = self
             .stmts
             .iter()
-            .map(|v| v.gen(ctx))
+            .map(|v| indent(&ctx, &v.gen(ctx)))
             .collect::<Vec<String>>()
             .join("\n");
         format!(
@@ -416,7 +480,7 @@ class {ident} {extends}{{
             },
             decls = rendered_decls
                 .iter()
-                .map(|decl| format!("{}\n", decl))
+                .map(|decl| format!("{}\n", indent(&ctx, decl)))
                 .collect::<Vec<String>>()
                 .join(""),
         )
@@ -443,9 +507,9 @@ pub struct ImportStar();
 
 #[derive(Debug)]
 pub struct Import {
-    def: Option<Ident>,
-    imps: Option<Either<ImportStar, Vec<ImportName>>>,
-    path: String,
+    pub def: Option<Ident>,
+    pub imps: Option<Either<ImportStar, Vec<ImportName>>>,
+    pub path: String,
 }
 
 impl Gen for Import {
@@ -497,21 +561,21 @@ mod tests {
 
     #[test]
     fn const_expr() {
-        let ctx = GenContext {};
+        let ctx = GenContext::new();
         let const_expr = Expr::Literal(Literal::String("OK".to_string()));
         assert_eq!(const_expr.gen(&ctx), "\"OK\"");
     }
 
     #[test]
     fn var_expr() {
-        let ctx = GenContext {};
+        let ctx = GenContext::new();
         let var_expr = Expr::Var("someVar".to_string());
         assert_eq!(var_expr.gen(&ctx), "someVar".to_string());
     }
 
     #[test]
     fn member_expr() {
-        let ctx = GenContext {};
+        let ctx = GenContext::new();
         let member_expr = Expr::Member {
             base: box Expr::Member {
                 base: box Expr::Var("this".to_string()),
@@ -524,7 +588,7 @@ mod tests {
 
     #[test]
     fn func_call_expr() {
-        let ctx = GenContext {};
+        let ctx = GenContext::new();
         let func_call_expr = Expr::FuncCall {
             // TODO: Improper use of `Var`
             func: box Expr::Var("console.log".to_string()),
@@ -535,7 +599,7 @@ mod tests {
 
     #[test]
     fn func_expr() {
-        let ctx = GenContext {};
+        let ctx = GenContext::new();
         let stmt = Stmt::Expr(Expr::FuncCall {
             // TODO: Improper use of `Var`
             func: box Expr::Var("console.log".to_string()),
@@ -558,7 +622,7 @@ console.log(\"OK\");
 
     #[test]
     fn arrow_func_expr() {
-        let ctx = GenContext {};
+        let ctx = GenContext::new();
         let expr = Expr::FuncCall {
             // TODO: Improper use of `Var`
             func: box Expr::Var("console.log".to_string()),
@@ -579,7 +643,7 @@ console.log(\"OK\");
 
     #[test]
     fn expr_stmt() {
-        let ctx = GenContext {};
+        let ctx = GenContext::new();
         // TODO: Improper use of `Var` here
         let expr = Expr::FuncCall {
             func: box Expr::Var("console.log".to_string()),
@@ -591,7 +655,7 @@ console.log(\"OK\");
 
     #[test]
     fn decl_stmt() {
-        let ctx = GenContext {};
+        let ctx = GenContext::new();
         let stmt = Stmt::Decl(Decl {
             typ: DeclType::Const,
             ident: Ident("hello".to_string()),
@@ -601,7 +665,7 @@ console.log(\"OK\");
 
     #[test]
     fn assign_stmt() {
-        let ctx = GenContext {};
+        let ctx = GenContext::new();
         let func_call = Expr::FuncCall {
             // TODO: Improper use of `Var` here
             func: box Expr::Var("console.log".to_string()),
@@ -617,7 +681,7 @@ console.log(\"OK\");
 
     #[test]
     fn for_loop_stmt() {
-        let ctx = GenContext {};
+        let ctx = GenContext::new();
         let func_call_1 = Expr::FuncCall {
             // TODO: Improper use of `Var` here
             func: box Expr::Var("console.log".to_string()),
@@ -672,7 +736,7 @@ alert((3) + (4));
             is_default: false,
             stmt: box stmt,
         };
-        assert_eq!(export_stmt.gen(&GenContext {}), "export xiaosi;")
+        assert_eq!(export_stmt.gen(&GenContext::new()), "export xiaosi;")
     }
 
     fn default_export() {
@@ -681,7 +745,10 @@ alert((3) + (4));
             is_default: true,
             stmt: box stmt,
         };
-        assert_eq!(export_stmt.gen(&GenContext {}), "export default xiaosi;")
+        assert_eq!(
+            export_stmt.gen(&GenContext::new()),
+            "export default xiaosi;"
+        )
     }
 
     #[test]
@@ -711,9 +778,9 @@ alert((3) + (4));
             methods,
             getters,
         };
-        println!("{}", xiaosi_class.gen(&GenContext {}));
+        println!("{}", xiaosi_class.gen(&GenContext::new()));
         assert_eq!(
-            xiaosi_class.gen(&GenContext {}),
+            xiaosi_class.gen(&GenContext::new()),
             "\
 class XiaoSi extends Parent {
 constructor(url, params) {
@@ -739,7 +806,7 @@ return 23;
         assert_eq!(
             "\
              import XiaoSi, * from \"xiaosi\";",
-            imp.gen(&GenContext {})
+            imp.gen(&GenContext::new())
         );
     }
 
@@ -756,7 +823,7 @@ return 23;
         assert_eq!(
             "\
              import {alpha, beta as bravo} from \"xiaosi\";",
-            imp.gen(&GenContext {})
+            imp.gen(&GenContext::new())
         );
     }
 
@@ -770,7 +837,7 @@ return 23;
         assert_eq!(
             "\
              import \"xiaosi\";",
-            imp.gen(&GenContext {})
+            imp.gen(&GenContext::new())
         );
     }
 
@@ -791,6 +858,6 @@ return 23;
             }),
         ];
         let code = Code { stmts: stmts };
-        println!("{}", code.gen(&GenContext {}));
+        println!("{}", code.gen(&GenContext::new()));
     }
 }
