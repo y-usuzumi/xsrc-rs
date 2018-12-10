@@ -153,8 +153,7 @@ fn gen_apiset(apiset: &ContextBoundedAPISet, code: &mut Code, parent_kls: &mut C
 
 fn gen_axios_call(url: &ContextValue, method: &HttpMethod) -> Expr {
     let url_expr = gen_context_value(url);
-    let args = vec![url_expr];
-    let func_name = match method {
+    let method = match method {
         HttpMethod::GET => "get",
         HttpMethod::POST => "post",
         HttpMethod::PUT => "put",
@@ -162,12 +161,15 @@ fn gen_axios_call(url: &ContextValue, method: &HttpMethod) -> Expr {
         HttpMethod::HEAD => "head",
         HttpMethod::OPTIONS => "options",
         HttpMethod::PATCH => "patch",
+    }.to_string();
+    let axios_config = hashmap!{
+        "method".to_string() => Expr::Literal(Literal::String(method)),
+        "url".to_string() => url_expr
     };
+    let args = vec![Expr::Object(axios_config)];
+    // TODO: Implement JSON in JavaScript codegen
     Expr::FuncCall {
-        func: box Expr::Member {
-            base: box Expr::Var("axios".to_string()),
-            member: Ident(func_name.to_string()),
-        },
+        func: box Expr::Var("axios".to_string()),
         args,
     }
 }

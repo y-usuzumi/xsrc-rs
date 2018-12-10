@@ -1,11 +1,12 @@
 //! Parser for string expressions used in schema definitions
-use std::fmt;
 use self::ParserError::*;
+use linked_hash_map::LinkedHashMap;
+use std::fmt;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Member {
     Super,
-    Member(String)
+    Member(String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -13,10 +14,10 @@ pub enum Expr {
     Lit(String),
     Concat(Box<Expr>, Box<Expr>),
     Ref(Vec<Member>),
-    Var(String)
+    Var(String),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Param {
     pub name: String,
     pub typ: Option<String>,
@@ -24,9 +25,9 @@ pub struct Param {
 
 impl Param {
     pub fn new(name: &str, typ: Option<String>) -> Self {
-        Param{
+        Param {
             name: name.to_string(),
-            typ
+            typ,
         }
     }
 }
@@ -36,6 +37,7 @@ pub enum ParserError {
     EmptyExpr,
     UnexpectedToken(String, usize),
     UnexpectedEOF,
+    DuplicateParam(String),
 }
 
 impl fmt::Display for ParserError {
@@ -44,6 +46,7 @@ impl fmt::Display for ParserError {
             EmptyExpr => write!(f, "Expr is empty"),
             UnexpectedToken(s, pos) => write!(f, "Unexpected token \"{}\" at pos {}", s, pos),
             UnexpectedEOF => write!(f, "Unexpected EOF"),
+            DuplicateParam(s) => write!(f, "Duplicate param \"{}\"", s)
         }
     }
 }
@@ -61,38 +64,52 @@ fn parse_ref(s: &str, pos: usize) -> Result<(Expr, usize), ParserError> {
     let mut siter = s.chars().skip(pos).enumerate();
     if let Some((inner_pos, ch)) = siter.next() {
         if ch != '{' {
-            return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos));
+            return Err(ParserError::UnexpectedToken(
+                ch.to_string(),
+                pos + inner_pos,
+            ));
         }
     } else {
-        return Err(ParserError::UnexpectedEOF)
+        return Err(ParserError::UnexpectedEOF);
     }
     let mut curr_ident = String::new();
     let inner_pos = loop {
         if let Some((inner_pos, ch)) = siter.next() {
             match ch {
-                '\\' => return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos)),
+                '\\' => {
+                    return Err(ParserError::UnexpectedToken(
+                        ch.to_string(),
+                        pos + inner_pos,
+                    ));
+                }
                 '}' => {
                     if curr_ident.len() == 0 {
-                        return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos))
+                        return Err(ParserError::UnexpectedToken(
+                            ch.to_string(),
+                            pos + inner_pos,
+                        ));
                     } else {
                         idents.push(ident_to_member(&curr_ident));
                     }
                     break inner_pos + 1;
-                },
+                }
                 '.' => {
                     if curr_ident.len() == 0 {
-                        return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos))
+                        return Err(ParserError::UnexpectedToken(
+                            ch.to_string(),
+                            pos + inner_pos,
+                        ));
                     } else {
                         idents.push(ident_to_member(&curr_ident));
                         curr_ident = String::new();
                     }
-                },
+                }
                 _ => {
                     curr_ident.push(ch);
                 }
             }
         } else {
-            return Err(ParserError::UnexpectedEOF)
+            return Err(ParserError::UnexpectedEOF);
         }
     };
     Ok((Expr::Ref(idents), pos + inner_pos))
@@ -108,19 +125,28 @@ fn parse_param(s: &str, pos: usize) -> Result<(Expr, Param, usize), ParserError>
             match ch {
                 '>' => {
                     if var.len() == 0 {
-                        return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos))
+                        return Err(ParserError::UnexpectedToken(
+                            ch.to_string(),
+                            pos + inner_pos,
+                        ));
                     }
-                    break inner_pos + 1
-                },
+                    break inner_pos + 1;
+                }
                 ':' => {
                     if var.len() == 0 {
-                        return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos))
+                        return Err(ParserError::UnexpectedToken(
+                            ch.to_string(),
+                            pos + inner_pos,
+                        ));
                     }
                     if !in_var {
-                        return Err(ParserError::UnexpectedToken(ch.to_string(), pos + inner_pos))
+                        return Err(ParserError::UnexpectedToken(
+                            ch.to_string(),
+                            pos + inner_pos,
+                        ));
                     }
                     in_var = false;
-                },
+                }
                 _ => {
                     if in_var {
                         var.push(ch);
@@ -130,16 +156,20 @@ fn parse_param(s: &str, pos: usize) -> Result<(Expr, Param, usize), ParserError>
                 }
             }
         } else {
-            return Err(ParserError::UnexpectedEOF)
+            return Err(ParserError::UnexpectedEOF);
         }
     };
-    if !in_var && typ.len() == 0 { // Caught ':' but no succeeding type
+    if !in_var && typ.len() == 0 {
+        // Caught ':' but no succeeding type
         Err(ParserError::UnexpectedEOF)
     } else {
         Ok((
             Expr::Var(var.to_string()),
-            Param{ name: var, typ: if typ.len() == 0 { None } else { Some(typ)} },
-            pos + inner_pos
+            Param {
+                name: var,
+                typ: if typ.len() == 0 { None } else { Some(typ) },
+            },
+            pos + inner_pos,
         ))
     }
 }
@@ -157,9 +187,9 @@ fn collect_exprs(mut exprs: Vec<Expr>) -> Result<Expr, ParserError> {
     }
 }
 
-pub fn parse_expr(s: &str) -> Result<(Expr, Vec<Param>), ParserError> {
+pub fn parse_expr(s: &str) -> Result<(Expr, LinkedHashMap<String, Param>), ParserError> {
     let mut exprs = Vec::new();
-    let mut params = Vec::new();
+    let mut params = LinkedHashMap::new();
     let mut siter = s.chars().enumerate().skip(0);
     let mut curr_str = String::new();
     loop {
@@ -170,10 +200,10 @@ pub fn parse_expr(s: &str) -> Result<(Expr, Vec<Param>), ParserError> {
                         exprs.push(Expr::Lit(curr_str));
                         curr_str = String::new();
                     }
-                    let (expr, pos) = parse_ref(s, pos+1)?;
+                    let (expr, pos) = parse_ref(s, pos + 1)?;
                     exprs.push(expr);
                     siter = s.chars().enumerate().skip(pos);
-                },
+                }
                 '<' => {
                     if curr_str.len() != 0 {
                         exprs.push(Expr::Lit(curr_str));
@@ -181,16 +211,19 @@ pub fn parse_expr(s: &str) -> Result<(Expr, Vec<Param>), ParserError> {
                     }
                     let (expr, param, pos) = parse_param(s, pos + 1)?;
                     exprs.push(expr);
-                    params.push(param);
+                    let param_name = param.name.to_string();
+                    if params.insert(param_name.to_string(), param).is_some() {
+                        return Err(ParserError::DuplicateParam(param_name));
+                    }
                     siter = s.chars().enumerate().skip(pos);
-                },
+                }
                 '\\' => {
                     if let Some((_, ch)) = siter.next() {
                         match ch {
-                            _ => curr_str.push(ch)  // TODO: Fix this
+                            _ => curr_str.push(ch), // TODO: Fix char escape
                         }
                     } else {
-                        return Err(ParserError::UnexpectedEOF)
+                        return Err(ParserError::UnexpectedEOF);
                     }
                 }
                 _ => {
@@ -211,12 +244,16 @@ pub fn parse_expr(s: &str) -> Result<(Expr, Vec<Param>), ParserError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::iter::FromIterator;
 
     #[test]
     fn test_parse_ref() {
         let some_ref = "{a.$b.c}";
         let result = parse_ref(&some_ref, 0);
-        let member = (&["a", "$b", "c"]).iter().map(|s| Member::Member(s.to_string())).collect::<Vec<_>>();
+        let member = (&["a", "$b", "c"])
+            .iter()
+            .map(|s| Member::Member(s.to_string()))
+            .collect::<Vec<_>>();
         assert_eq!(result.unwrap().0, Expr::Ref(member));
     }
 
@@ -250,7 +287,13 @@ mod tests {
         let result = parse_param(&some_param, 0);
         let (expr, param, pos) = result.unwrap();
         assert_eq!(expr, Expr::Var("hello".to_string()));
-        assert_eq!(param, Param{ name: "hello".to_string(), typ: Some("world".to_string())});
+        assert_eq!(
+            param,
+            Param {
+                name: "hello".to_string(),
+                typ: Some("world".to_string())
+            }
+        );
         assert_eq!(pos, 12);
     }
 
@@ -260,7 +303,13 @@ mod tests {
         let result = parse_param(&some_param, 0);
         let (expr, param, pos) = result.unwrap();
         assert_eq!(expr, Expr::Var("hello".to_string()));
-        assert_eq!(param, Param{ name: "hello".to_string(), typ: None});
+        assert_eq!(
+            param,
+            Param {
+                name: "hello".to_string(),
+                typ: None
+            }
+        );
         assert_eq!(pos, 6);
     }
 
@@ -306,9 +355,9 @@ mod tests {
         let expected = Expr::Concat(
             box Expr::Concat(
                 box Expr::Lit("Hello".to_string()),
-                box Expr::Var("World".to_string())
+                box Expr::Var("World".to_string()),
             ),
-            box Expr::Var("Xiaosi".to_string())
+            box Expr::Var("Xiaosi".to_string()),
         );
         assert_eq!(collect_exprs(exprs).unwrap(), expected);
     }
@@ -324,17 +373,29 @@ mod tests {
         let s = "abc${!super.def}<id:gg>hij";
         let result = parse_expr(s);
         let (expr, params) = result.unwrap();
-        assert_eq!(expr, Expr::Concat(
-            box Expr::Concat(
+        assert_eq!(
+            expr,
+            Expr::Concat(
                 box Expr::Concat(
-                    box Expr::Lit("abc".to_string()),
-                    box Expr::Ref(vec![Member::Super, Member::Member("def".to_string())])
+                    box Expr::Concat(
+                        box Expr::Lit("abc".to_string()),
+                        box Expr::Ref(vec![Member::Super, Member::Member("def".to_string())])
+                    ),
+                    box Expr::Var("id".to_string())
                 ),
-                box Expr::Var("id".to_string())
-            ),
-            box Expr::Lit("hij".to_string())
-        ));
-        assert_eq!(params, vec![Param{ name: "id".to_string(), typ: Some("gg".to_string()) }]);
+                box Expr::Lit("hij".to_string())
+            )
+        );
+        assert_eq!(
+            params,
+            LinkedHashMap::from_iter(vec![(
+                "id".to_string(),
+                Param {
+                    name: "id".to_string(),
+                    typ: Some("gg".to_string())
+                }
+            )])
+        );
     }
 
     #[test]

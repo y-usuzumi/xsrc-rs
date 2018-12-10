@@ -6,6 +6,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::From;
 use std::fmt;
+use std::iter::FromIterator;
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq)]
@@ -29,7 +30,7 @@ impl HttpMethod {
             "head" | "HEAD" => HttpMethod::HEAD,
             "options" | "OPTIONS" => HttpMethod::OPTIONS,
             "patch" | "PATCH" => HttpMethod::PATCH,
-            _ => panic!("Caught unsupported HTTP method: {}", s)
+            _ => panic!("Caught unsupported HTTP method: {}", s),
         }
     }
 }
@@ -243,6 +244,8 @@ fn transform_apiset(
                 children.insert(k.to_string(), child);
             }
             let (expr, params) = parse_expr(&schema.url)?;
+            // TODO: This looks ugly. There should be a more idiomatic approach.
+            let params = params.into_iter().map(|(_, v)| v).collect::<Vec<Param>>();
             Ok(ContextBoundedAPIData::APISet(ContextBoundedAPISet {
                 name: name.to_string(),
                 url: ContextValue::Expr(expr),
@@ -252,12 +255,26 @@ fn transform_apiset(
             }))
         }
         APIData::API(schema) => {
-            let (expr, params) = parse_expr(&schema.url)?;
+            let (expr, mut params) = parse_expr(&schema.url)?;
+            for (name, typ) in &schema.params {
+                let p = Param { name: name.to_string(), typ: typ.clone() };
+                if params.insert(name.to_string(), p).is_some() {
+                    return Err(TransformerError::from(ParserError::DuplicateParam(name.to_string())));
+                }
+            }
+            for (name, typ) in &schema.data {
+                let p = Param { name: name.to_string(), typ: typ.clone() };
+                if params.insert(name.to_string(), p).is_some() {
+                    return Err(TransformerError::from(ParserError::DuplicateParam(name.to_string())));
+                }
+            }
+            // TODO: This looks ugly. There should be a more idiomatic approach.
+            let params = params.into_iter().map(|(_, v)| v).collect::<Vec<Param>>();
             Ok(ContextBoundedAPIData::API(ContextBoundedAPI {
                 name: name.to_string(),
                 method: HttpMethod::from_str(&schema.method),
                 url: ContextValue::Expr(expr),
-                params: params,
+                params,
                 context: ctx,
             }))
         }
@@ -270,8 +287,10 @@ pub fn transform(source: RootSchema) -> Result<ContextBoundedRoot, TransformerEr
     let mut root_params = Vec::new();
     match source.url {
         Some(ref s) => {
-            let (expr, mut params) = parse_expr(s)?;
-            root_params.append(&mut params);
+            let (expr, params) = parse_expr(s)?;
+            // TODO: This looks ugly. There should be a more idiomatic approach.
+            let params = params.into_iter().map(|(_, v)| v).collect::<Vec<Param>>();
+            root_params.extend(params);
             url = ContextValue::Expr(expr);
         }
         None => {
@@ -414,14 +433,18 @@ pub mod tests {
             apisets: APIDataMap(hashmap![
                 "ahcro".to_string() => APIData::API(APISchema{
                     method: "GET".to_string(),
-                    url: "${!super.url}/<ahcroId:uuid>".to_string()
+                    url: "${!super.url}/<ahcroId:uuid>".to_string(),
+                    params: HashMap::new(),
+                    data: HashMap::new()
                 }),
                 "ratincren".to_string() => APIData::APISet(APISetSchema{
                     url: "${!super.url}/ratincren".to_string(),
                     apisets: APIDataMap(hashmap![
                         "get".to_string() => APIData::API(APISchema{
                             method: "GET".to_string(),
-                            url: "${!super.url}/<name:string>".to_string()
+                            url: "${!super.url}/<name:string>".to_string(),
+                            params: HashMap::new(),
+                            data: HashMap::new()
                         })
                     ])
                 })

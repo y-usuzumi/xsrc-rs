@@ -129,6 +129,12 @@ pub struct APISchema {
     #[serde(rename = "$method", default = "APISchema::default_method")]
     pub method: String,
 
+    #[serde(rename = "$params", default = "APISchema::default_params")]
+    pub params: HashMap<String, Option<String>>,
+
+    #[serde(rename = "$data", default = "APISchema::default_data")]
+    pub data: HashMap<String, Option<String>>,
+
     #[serde(rename = "$url", default = "APISchema::default_url")]
     pub url: String,
 }
@@ -136,6 +142,14 @@ pub struct APISchema {
 impl APISchema {
     fn default_method() -> String {
         "GET".to_string()
+    }
+
+    fn default_params() -> HashMap<String, Option<String>> {
+        HashMap::new()
+    }
+
+    fn default_data() -> HashMap<String, Option<String>> {
+        HashMap::new()
     }
 
     fn default_url() -> String {

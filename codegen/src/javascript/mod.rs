@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use super::utils::Either;
 use super::utils::Either::*;
 use std::default::Default;
@@ -237,6 +238,8 @@ pub enum Expr {
     Literal(Literal),
     // a
     Var(String),
+    // object
+    Object(HashMap<String, Expr>),
     // a > b
     Comp {
         op: CompOp,
@@ -282,6 +285,7 @@ impl Gen for Expr {
         match self {
             Expr::Literal(val) => val.gen(ctx),
             Expr::Var(ident) => ident.to_string(),
+            Expr::Object(obj) => panic!("Not implemented yet"),
             Expr::Comp { op, l, r } => format!("({}) {} ({})", l.gen(ctx), op.gen(ctx), r.gen(ctx)),
             Expr::Arith { op, l, r } => {
                 format!("({}) {} ({})", l.gen(ctx), op.gen(ctx), r.gen(ctx))
