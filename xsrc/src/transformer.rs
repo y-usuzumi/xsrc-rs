@@ -1,12 +1,38 @@
 use self::ContextLookupError::*;
 use super::schema::{APIData, RootSchema};
-use super::se_parser::{parse_expr, Member, Expr, ParserError};
 pub use super::se_parser::Param;
+use super::se_parser::{parse_expr, Expr, Member, ParserError};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::From;
 use std::fmt;
 use std::rc::Rc;
+
+#[derive(Debug, PartialEq)]
+pub enum HttpMethod {
+    GET,
+    POST,
+    PUT,
+    DELETE,
+    HEAD,
+    OPTIONS,
+    PATCH,
+}
+
+impl HttpMethod {
+    fn from_str(s: &str) -> Self {
+        match s {
+            "get" | "GET" => HttpMethod::GET,
+            "post" | "POST" => HttpMethod::POST,
+            "put" | "PUT" => HttpMethod::PUT,
+            "delete" | "DELETE" => HttpMethod::DELETE,
+            "head" | "HEAD" => HttpMethod::HEAD,
+            "options" | "OPTIONS" => HttpMethod::OPTIONS,
+            "patch" | "PATCH" => HttpMethod::PATCH,
+            _ => panic!("Caught unsupported HTTP method: {}", s)
+        }
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub struct ContextBoundedRoot {
@@ -26,7 +52,7 @@ pub enum ContextBoundedAPIData {
 #[derive(Debug, PartialEq)]
 pub struct ContextBoundedAPI {
     pub name: String,
-    pub method: String,
+    pub method: HttpMethod,
     pub url: ContextValue,
     pub params: Vec<Param>,
     pub context: Rc<RefCell<Context>>,
@@ -44,7 +70,7 @@ pub struct ContextBoundedAPISet {
 #[derive(Debug, PartialEq)]
 pub enum TransformerError {
     ContextLookupError(ContextLookupError),
-    ParserError(ParserError)
+    ParserError(ParserError),
 }
 
 impl From<ContextLookupError> for TransformerError {
@@ -197,7 +223,11 @@ impl Context {
     }
 }
 
-fn transform_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>) -> Result<ContextBoundedAPIData, TransformerError> {
+fn transform_apiset(
+    name: &str,
+    apiset: &APIData,
+    root_ctx: Rc<RefCell<Context>>,
+) -> Result<ContextBoundedAPIData, TransformerError> {
     let mut scope = HashMap::new();
     let ctx = Rc::new(RefCell::new(Context {
         name: name.to_string(),
@@ -225,7 +255,7 @@ fn transform_apiset(name: &str, apiset: &APIData, root_ctx: Rc<RefCell<Context>>
             let (expr, params) = parse_expr(&schema.url)?;
             Ok(ContextBoundedAPIData::API(ContextBoundedAPI {
                 name: name.to_string(),
-                method: schema.method.to_string(),
+                method: HttpMethod::from_str(&schema.method),
                 url: ContextValue::Expr(expr),
                 params: params,
                 context: ctx,
@@ -243,12 +273,10 @@ pub fn transform(source: RootSchema) -> Result<ContextBoundedRoot, TransformerEr
             let (expr, mut params) = parse_expr(s)?;
             root_params.append(&mut params);
             url = ContextValue::Expr(expr);
-        },
+        }
         None => {
             root_params.push(Param::new("url", Some("string".to_string())));
-            url = ContextValue::Expr(
-                Expr::Var("url".to_string()),
-            );
+            url = ContextValue::Expr(Expr::Var("url".to_string()));
         }
     }
     let root_ctx = Rc::new(RefCell::new(Context {
@@ -273,8 +301,8 @@ pub fn transform(source: RootSchema) -> Result<ContextBoundedRoot, TransformerEr
 
 #[cfg(test)]
 pub mod tests {
-    use super::*;
     use super::super::schema::*;
+    use super::*;
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -357,10 +385,7 @@ pub mod tests {
             .borrow()
             .lookup(&["!super".to_string(), "foo".to_string()])
             .unwrap();
-        assert_eq!(
-            result,
-            ContextValue::Expr(Expr::Lit("hello".to_string()))
-        )
+        assert_eq!(result, ContextValue::Expr(Expr::Lit("hello".to_string())))
     }
 
     #[test]
@@ -383,7 +408,7 @@ pub mod tests {
 
     #[test]
     fn test_transform() {
-        let schema = RootSchema{
+        let schema = RootSchema {
             url: Some("http://ratina.org/<id:int>".to_string()),
             klsname: "RatinaClient".to_string(),
             apisets: APIDataMap(hashmap![
@@ -400,26 +425,35 @@ pub mod tests {
                         })
                     ])
                 })
-            ])
+            ]),
         };
         let root_ast = transform(schema).unwrap();
         let root_ctx = Rc::new(RefCell::new(Context::new("RatinaClient", None)));
         let ahcro_ctx = Rc::new(RefCell::new(Context::new("ahcro", Some(root_ctx.clone()))));
-        let ratincren_ctx = Rc::new(RefCell::new(Context::new("ratincren", Some(root_ctx.clone()))));
-        let ratincren_get_ctx = Rc::new(RefCell::new(Context::new("get", Some(ratincren_ctx.clone()))));
+        let ratincren_ctx = Rc::new(RefCell::new(Context::new(
+            "ratincren",
+            Some(root_ctx.clone()),
+        )));
+        let ratincren_get_ctx = Rc::new(RefCell::new(Context::new(
+            "get",
+            Some(ratincren_ctx.clone()),
+        )));
         assert_eq!(
             root_ast,
-            ContextBoundedRoot{
+            ContextBoundedRoot {
                 klsname: "RatinaClient".to_string(),
                 url: ContextValue::Expr(Expr::Concat(
                     box Expr::Lit("http://ratina.org/".to_string()),
                     box Expr::Var("id".to_string())
                 )),
-                params: vec![Param{ name: "id".to_string(), typ: Some("int".to_string())}],
+                params: vec![Param {
+                    name: "id".to_string(),
+                    typ: Some("int".to_string())
+                }],
                 apisets: hashmap![
                     "ahcro".to_string() => ContextBoundedAPIData::API(ContextBoundedAPI{
                         name: "ahcro".to_string(),
-                        method: "GET".to_string(),
+                        method: HttpMethod::from_str("GET"),
                         url: ContextValue::Expr(
                             Expr::Concat(
                                 box Expr::Concat(
@@ -444,7 +478,7 @@ pub mod tests {
                         apisets: hashmap![
                             "get".to_string() => ContextBoundedAPIData::API(ContextBoundedAPI{
                                 name: "get".to_string(),
-                                method: "GET".to_string(),
+                                method: HttpMethod::from_str("GET"),
                                 url: ContextValue::Expr(
                                     Expr::Concat(
                                         box Expr::Concat(

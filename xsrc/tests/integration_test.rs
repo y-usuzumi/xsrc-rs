@@ -1,6 +1,8 @@
 // Note: Per doc, each file in tests directory is a separate crate.
 extern crate xsrc;
 
+use std::default::Default;
+
 #[test]
 fn test_noname() {
     let schema_str = include_str!("fixtures/sample_no_klsname_no_url.yaml");
@@ -12,7 +14,8 @@ fn test_noname() {
     let root = xsrc::transformer::transform(root_schema).unwrap();
     println!("===== Context-bounded root =====");
     println!("{:?}", root);
-    let code = xsrc::rewriter::javascript::gen(&root);
+    let gen_ctx = Default::default();
+    let code = xsrc::rewriter::javascript::gen(&root, &gen_ctx);
     println!("===== JavaScript Code =====");
     println!("{}", code);
 }
