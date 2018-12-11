@@ -1,6 +1,9 @@
 use crate::se_parser as sp;
 use crate::transformer::*;
 use codegen::javascript::*;
+use linked_hash_map::LinkedHashMap;
+use std::collections::HashMap;
+use std::iter::FromIterator;
 
 fn gen_ref(ms: &[sp::Member]) -> Expr {
     let mut expr = Expr::Var("this".to_string());
@@ -42,11 +45,11 @@ fn gen_context_value(v: &ContextValue) -> Expr {
 }
 
 fn root_constructor(root: &ContextBoundedRoot) -> Option<Constructor> {
-    if root.params.len() > 0 {
+    if root.bounded_vars.len() > 0 {
         let stmts = root
-            .params
+            .bounded_vars
             .iter()
-            .map(|p| {
+            .map(|(_, p)| {
                 Stmt::Assign(Assign {
                     typ: None,
                     assignee: Expr::Member {
@@ -59,9 +62,9 @@ fn root_constructor(root: &ContextBoundedRoot) -> Option<Constructor> {
             .collect::<Vec<Stmt>>();
         Some(Constructor {
             params: root
-                .params
+                .bounded_vars
                 .iter()
-                .map(|p| Ident(p.name.clone()))
+                .map(|(_, p)| Ident(p.name.clone()))
                 .collect::<Vec<Ident>>(),
             stmts,
         })
@@ -81,45 +84,43 @@ fn root_constructor(root: &ContextBoundedRoot) -> Option<Constructor> {
 }
 
 fn apiset_constructor(apiset: &ContextBoundedAPISet) -> Option<Constructor> {
-    let mut stmts = vec![Stmt::Assign(Assign {
-        typ: None,
-        assignee: Expr::Member {
-            base: box Expr::Var("this".to_string()),
-            member: Ident("_super".to_string()),
-        },
-        expr: Expr::Var("_super".to_string()),
-    })];
-    let mut params = vec![Ident("_super".to_string())];
-    if apiset.params.len() > 0 {
-        stmts.extend(apiset.params.iter().map(|p| {
-            Stmt::Assign(Assign {
-                typ: None,
-                assignee: Expr::Member {
-                    base: box Expr::Var("this".to_string()),
-                    member: Ident(p.name.clone()),
-                },
-                expr: Expr::Var(p.name.clone()),
-            })
-        }));
-        params.extend(
-            apiset
-                .params
-                .iter()
-                .map(|p| Ident(p.name.clone()))
-                .collect::<Vec<Ident>>(),
-        );
-        Some(Constructor { params, stmts })
-    } else {
-        stmts.push(Stmt::Assign(Assign {
+    let mut stmts = vec![
+        Stmt::Assign(Assign {
+            typ: None,
+            assignee: Expr::Member {
+                base: box Expr::Var("this".to_string()),
+                member: Ident("_super".to_string()),
+            },
+            expr: Expr::Var("_super".to_string()),
+        }),
+        Stmt::Assign(Assign {
             typ: None,
             assignee: Expr::Member {
                 base: box Expr::Var("this".to_string()),
                 member: Ident("_url".to_string()),
             },
             expr: gen_context_value(&apiset.url),
-        }));
-        Some(Constructor { params, stmts })
-    }
+        }),
+    ];
+    let mut params = vec![Ident("_super".to_string())];
+    stmts.extend(apiset.bounded_vars.iter().map(|(_, p)| {
+        Stmt::Assign(Assign {
+            typ: None,
+            assignee: Expr::Member {
+                base: box Expr::Var("this".to_string()),
+                member: Ident(p.name.clone()),
+            },
+            expr: Expr::Var(p.name.clone()),
+        })
+    }));
+    params.extend(
+        apiset
+            .bounded_vars
+            .iter()
+            .map(|(_, p)| Ident(p.name.clone()))
+            .collect::<Vec<Ident>>(),
+    );
+    Some(Constructor { params, stmts })
 }
 
 fn gen_apiset(apiset: &ContextBoundedAPISet, code: &mut Code, parent_kls: &mut Class) {
@@ -151,7 +152,12 @@ fn gen_apiset(apiset: &ContextBoundedAPISet, code: &mut Code, parent_kls: &mut C
     code.stmts.push(Stmt::Class(kls));
 }
 
-fn gen_axios_call(url: &ContextValue, method: &HttpMethod) -> Expr {
+fn gen_axios_call(
+    url: &ContextValue,
+    method: &HttpMethod,
+    params: &LinkedHashMap<String, Param>,
+    data: &LinkedHashMap<String, Param>,
+) -> Expr {
     let url_expr = gen_context_value(url);
     let method = match method {
         HttpMethod::GET => "get",
@@ -161,13 +167,28 @@ fn gen_axios_call(url: &ContextValue, method: &HttpMethod) -> Expr {
         HttpMethod::HEAD => "head",
         HttpMethod::OPTIONS => "options",
         HttpMethod::PATCH => "patch",
-    }.to_string();
-    let axios_config = hashmap!{
+    }
+    .to_string();
+    let mut axios_config = linked_hashmap! {
         "method".to_string() => Expr::Literal(Literal::String(method)),
-        "url".to_string() => url_expr
+        "url".to_string() => url_expr,
     };
+    if params.len() > 0 {
+        let params = LinkedHashMap::from_iter(
+            params
+                .iter()
+                .map(|(k, v)| (k.to_string(), Expr::Var(v.name.to_string()))),
+        );
+        axios_config.insert("params".to_string(), Expr::Object(params));
+    }
+    if data.len() > 0 {
+        let data = LinkedHashMap::from_iter(
+            data.iter()
+                .map(|(k, v)| (k.to_string(), Expr::Var(v.name.to_string()))),
+        );
+        axios_config.insert("data".to_string(), Expr::Object(data));
+    }
     let args = vec![Expr::Object(axios_config)];
-    // TODO: Implement JSON in JavaScript codegen
     Expr::FuncCall {
         func: box Expr::Var("axios".to_string()),
         args,
@@ -175,15 +196,18 @@ fn gen_axios_call(url: &ContextValue, method: &HttpMethod) -> Expr {
 }
 
 fn gen_api(api: &ContextBoundedAPI, kls: &mut Class) {
-    let stmts = vec![
-        Stmt::Return(gen_axios_call(&api.url, &api.method))
-    ];
+    let stmts = vec![Stmt::Return(gen_axios_call(
+        &api.url,
+        &api.method,
+        &api.params,
+        &api.data,
+    ))];
     let method = Method {
         ident: Ident(api.name.to_string()),
         params: api
             .params
             .iter()
-            .map(|p| p.name.to_string())
+            .map(|(_, p)| p.name.to_string())
             .collect::<Vec<String>>(),
         stmts,
         is_async: true,

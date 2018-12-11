@@ -1,9 +1,10 @@
 use self::ContextLookupError::*;
+use linked_hash_map::LinkedHashMap;
+use std::collections::HashMap;
 use super::schema::{APIData, RootSchema};
 pub use super::se_parser::Param;
 use super::se_parser::{parse_expr, Expr, Member, ParserError};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::convert::From;
 use std::fmt;
 use std::iter::FromIterator;
@@ -39,8 +40,8 @@ impl HttpMethod {
 pub struct ContextBoundedRoot {
     pub klsname: String,
     pub url: ContextValue,
-    pub params: Vec<Param>,
-    pub apisets: HashMap<String, ContextBoundedAPIData>,
+    pub bounded_vars: LinkedHashMap<String, Param>,
+    pub apisets: LinkedHashMap<String, ContextBoundedAPIData>,
     pub context: Rc<RefCell<Context>>,
 }
 
@@ -55,7 +56,9 @@ pub struct ContextBoundedAPI {
     pub name: String,
     pub method: HttpMethod,
     pub url: ContextValue,
-    pub params: Vec<Param>,
+    pub bounded_vars: LinkedHashMap<String, Param>,
+    pub data: LinkedHashMap<String, Param>,
+    pub params: LinkedHashMap<String, Param>,
     pub context: Rc<RefCell<Context>>,
 }
 
@@ -63,8 +66,8 @@ pub struct ContextBoundedAPI {
 pub struct ContextBoundedAPISet {
     pub name: String,
     pub url: ContextValue,
-    pub params: Vec<Param>,
-    pub apisets: HashMap<String, ContextBoundedAPIData>,
+    pub bounded_vars: LinkedHashMap<String, Param>,
+    pub apisets: LinkedHashMap<String, ContextBoundedAPIData>,
     pub context: Rc<RefCell<Context>>,
 }
 
@@ -238,42 +241,52 @@ fn transform_apiset(
     }));
     match apiset {
         APIData::APISet(schema) => {
-            let mut children = HashMap::new();
+            let mut children = LinkedHashMap::new();
             for (k, v) in schema.apisets.iter() {
                 let child = transform_apiset(k, v, Rc::clone(&ctx))?;
                 children.insert(k.to_string(), child);
             }
-            let (expr, params) = parse_expr(&schema.url)?;
-            // TODO: This looks ugly. There should be a more idiomatic approach.
-            let params = params.into_iter().map(|(_, v)| v).collect::<Vec<Param>>();
+            let (expr, mut bounded_vars) = parse_expr(&schema.url)?;
             Ok(ContextBoundedAPIData::APISet(ContextBoundedAPISet {
                 name: name.to_string(),
                 url: ContextValue::Expr(expr),
-                params,
+                bounded_vars,
                 apisets: children,
                 context: ctx,
             }))
         }
         APIData::API(schema) => {
-            let (expr, mut params) = parse_expr(&schema.url)?;
+            let (expr, mut bounded_vars) = parse_expr(&schema.url)?;
             for (name, typ) in &schema.params {
                 let p = Param { name: name.to_string(), typ: typ.clone() };
-                if params.insert(name.to_string(), p).is_some() {
+                if bounded_vars.insert(name.to_string(), p).is_some() {
                     return Err(TransformerError::from(ParserError::DuplicateParam(name.to_string())));
                 }
             }
             for (name, typ) in &schema.data {
                 let p = Param { name: name.to_string(), typ: typ.clone() };
-                if params.insert(name.to_string(), p).is_some() {
+                if bounded_vars.insert(name.to_string(), p).is_some() {
                     return Err(TransformerError::from(ParserError::DuplicateParam(name.to_string())));
                 }
             }
-            // TODO: This looks ugly. There should be a more idiomatic approach.
-            let params = params.into_iter().map(|(_, v)| v).collect::<Vec<Param>>();
+            let data = LinkedHashMap::from_iter(
+                schema.data.iter().map(|(k, v)| (
+                    k.to_string(),
+                    Param{ name: k.to_string(), typ: v.clone()})
+                )
+            );
+            let params = LinkedHashMap::from_iter(
+                schema.params.iter().map(|(k, v)| (
+                    k.to_string(),
+                    Param{ name: k.to_string(), typ: v.clone()})
+                )
+            );
             Ok(ContextBoundedAPIData::API(ContextBoundedAPI {
                 name: name.to_string(),
                 method: HttpMethod::from_str(&schema.method),
                 url: ContextValue::Expr(expr),
+                bounded_vars,
+                data,
                 params,
                 context: ctx,
             }))
@@ -284,17 +297,16 @@ fn transform_apiset(
 pub fn transform(source: RootSchema) -> Result<ContextBoundedRoot, TransformerError> {
     let scope = HashMap::new();
     let url: ContextValue;
-    let mut root_params = Vec::new();
+    let mut bounded_vars = LinkedHashMap::new();
     match source.url {
         Some(ref s) => {
-            let (expr, params) = parse_expr(s)?;
-            // TODO: This looks ugly. There should be a more idiomatic approach.
-            let params = params.into_iter().map(|(_, v)| v).collect::<Vec<Param>>();
-            root_params.extend(params);
+            let (expr, vars) = parse_expr(s)?;
             url = ContextValue::Expr(expr);
+            bounded_vars.extend(vars);
         }
         None => {
-            root_params.push(Param::new("url", Some("string".to_string())));
+            let url_param = Param::new("url", Some("string".to_string()));
+            bounded_vars.insert("url".to_string(), url_param);
             url = ContextValue::Expr(Expr::Var("url".to_string()));
         }
     }
@@ -304,7 +316,7 @@ pub fn transform(source: RootSchema) -> Result<ContextBoundedRoot, TransformerEr
         children: HashMap::new(),
         scope,
     }));
-    let mut apisets = HashMap::new();
+    let mut apisets = LinkedHashMap::new();
     for (k, v) in source.apisets.iter() {
         let child = transform_apiset(k, v, Rc::clone(&root_ctx))?;
         apisets.insert(k.to_string(), child);
@@ -312,8 +324,8 @@ pub fn transform(source: RootSchema) -> Result<ContextBoundedRoot, TransformerEr
     Ok(ContextBoundedRoot {
         klsname: source.klsname,
         url,
-        params: root_params,
-        apisets: apisets,
+        bounded_vars,
+        apisets,
         context: Rc::clone(&root_ctx),
     })
 }
@@ -430,21 +442,21 @@ pub mod tests {
         let schema = RootSchema {
             url: Some("http://ratina.org/<id:int>".to_string()),
             klsname: "RatinaClient".to_string(),
-            apisets: APIDataMap(hashmap![
+            apisets: APIDataMap(linked_hashmap![
                 "ahcro".to_string() => APIData::API(APISchema{
                     method: "GET".to_string(),
                     url: "${!super.url}/<ahcroId:uuid>".to_string(),
-                    params: HashMap::new(),
-                    data: HashMap::new()
+                    params: LinkedHashMap::new(),
+                    data: LinkedHashMap::new()
                 }),
                 "ratincren".to_string() => APIData::APISet(APISetSchema{
                     url: "${!super.url}/ratincren".to_string(),
-                    apisets: APIDataMap(hashmap![
+                    apisets: APIDataMap(linked_hashmap![
                         "get".to_string() => APIData::API(APISchema{
                             method: "GET".to_string(),
                             url: "${!super.url}/<name:string>".to_string(),
-                            params: HashMap::new(),
-                            data: HashMap::new()
+                            params: LinkedHashMap::new(),
+                            data: LinkedHashMap::new()
                         })
                     ])
                 })
@@ -469,11 +481,13 @@ pub mod tests {
                     box Expr::Lit("http://ratina.org/".to_string()),
                     box Expr::Var("id".to_string())
                 )),
-                params: vec![Param {
-                    name: "id".to_string(),
-                    typ: Some("int".to_string())
-                }],
-                apisets: hashmap![
+                bounded_vars: linked_hashmap![
+                    "id".to_string() => Param {
+                        name: "id".to_string(),
+                        typ: Some("int".to_string())
+                    }
+                ],
+                apisets: linked_hashmap![
                     "ahcro".to_string() => ContextBoundedAPIData::API(ContextBoundedAPI{
                         name: "ahcro".to_string(),
                         method: HttpMethod::from_str("GET"),
@@ -486,7 +500,10 @@ pub mod tests {
                                 box Expr::Var("ahcroId".to_string())
                             )
                         ),
-                        params: vec![Param{ name: "ahcroId".to_string(), typ: Some("uuid".to_string())}],
+                        bounded_vars: linked_hashmap![
+                            "ahcroId".to_string() => Param{ name: "ahcroId".to_string(), typ: Some("uuid".to_string())}],
+                        params: LinkedHashMap::new(),
+                        data: LinkedHashMap::new(),
                         context: ahcro_ctx
                     }),
                     "ratincren".to_string() => ContextBoundedAPIData::APISet(ContextBoundedAPISet{
@@ -497,8 +514,8 @@ pub mod tests {
                                 box Expr::Lit("/ratincren".to_string())
                             )
                         ),
-                        params: Vec::new(),
-                        apisets: hashmap![
+                        bounded_vars: LinkedHashMap::new(),
+                        apisets: linked_hashmap![
                             "get".to_string() => ContextBoundedAPIData::API(ContextBoundedAPI{
                                 name: "get".to_string(),
                                 method: HttpMethod::from_str("GET"),
@@ -511,7 +528,14 @@ pub mod tests {
                                         box Expr::Var("name".to_string())
                                     )
                                 ),
-                                params: vec![Param{ name: "name".to_string(), typ: Some("string".to_string())}],
+                                bounded_vars: linked_hashmap![
+                                    "name".to_string() => Param{
+                                        name: "name".to_string(),
+                                        typ: Some("string".to_string())
+                                    }
+                                ],
+                                params: LinkedHashMap::new(),
+                                data: LinkedHashMap::new(),
                                 context: ratincren_get_ctx
                             })
                         ],

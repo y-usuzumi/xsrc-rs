@@ -9,5 +9,6 @@ maplit = "1.0"
 serde = "1.0"
 serde_derive = "1.0"
 serde_yaml = "0.8"
-linked-hash-map = "0.5.1"
+linked-hash-map = { version = "0.5.1", features = ["serde_impl"] }
+utils = { path = "../utils" }
 codegen = { path = "../codegen" }

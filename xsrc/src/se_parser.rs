@@ -112,6 +112,12 @@ fn parse_ref(s: &str, pos: usize) -> Result<(Expr, usize), ParserError> {
             return Err(ParserError::UnexpectedEOF);
         }
     };
+    match idents[idents.len() - 1] {
+        Member::Super => {
+            idents.push(Member::Member("url".to_string()))
+        },
+        _ => {}
+    }
     Ok((Expr::Ref(idents), pos + inner_pos))
 }
 

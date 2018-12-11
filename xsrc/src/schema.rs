@@ -1,6 +1,6 @@
 use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
 use serde::ser::{Serialize, SerializeMap, Serializer};
-use std::collections::HashMap;
+use linked_hash_map::LinkedHashMap;
 use std::convert::From;
 use std::fmt;
 use std::fs::File;
@@ -14,12 +14,12 @@ pub enum ParserError {
 }
 
 #[derive(Debug)]
-pub struct APIDataMap(pub HashMap<String, APIData>);
+pub struct APIDataMap(pub LinkedHashMap<String, APIData>);
 
 impl Deref for APIDataMap {
-    type Target = HashMap<String, APIData>;
+    type Target = LinkedHashMap<String, APIData>;
 
-    fn deref(&self) -> &HashMap<String, APIData> {
+    fn deref(&self) -> &LinkedHashMap<String, APIData> {
         return &self.0;
     }
 }
@@ -49,7 +49,7 @@ impl<'de> Visitor<'de> for APIDataMapVisitor {
     where
         M: MapAccess<'de>,
     {
-        let mut map = HashMap::with_capacity(access.size_hint().unwrap_or(0));
+        let mut map = LinkedHashMap::with_capacity(access.size_hint().unwrap_or(0));
 
         // While there are entries remaining in the input, add them
         // into our map.
@@ -130,10 +130,10 @@ pub struct APISchema {
     pub method: String,
 
     #[serde(rename = "$params", default = "APISchema::default_params")]
-    pub params: HashMap<String, Option<String>>,
+    pub params: LinkedHashMap<String, Option<String>>,
 
     #[serde(rename = "$data", default = "APISchema::default_data")]
-    pub data: HashMap<String, Option<String>>,
+    pub data: LinkedHashMap<String, Option<String>>,
 
     #[serde(rename = "$url", default = "APISchema::default_url")]
     pub url: String,
@@ -144,12 +144,12 @@ impl APISchema {
         "GET".to_string()
     }
 
-    fn default_params() -> HashMap<String, Option<String>> {
-        HashMap::new()
+    fn default_params() -> LinkedHashMap<String, Option<String>> {
+        LinkedHashMap::new()
     }
 
-    fn default_data() -> HashMap<String, Option<String>> {
-        HashMap::new()
+    fn default_data() -> LinkedHashMap<String, Option<String>> {
+        LinkedHashMap::new()
     }
 
     fn default_url() -> String {
