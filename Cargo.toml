@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "xsrc",
-    "codegen"
+    "codegen",
+    "utils"
 ]

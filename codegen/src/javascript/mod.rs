@@ -1,18 +1,17 @@
-use std::collections::HashMap;
 use super::utils::Either;
 use super::utils::Either::*;
+use linked_hash_map::LinkedHashMap;
 use std::default::Default;
 use std::fmt;
 
-fn indent(ctx: &GenContext, s: &str) -> String {
+fn indent(s: &str, ctx: &GenContext) -> String {
     match ctx.pretty {
         None => s.to_string(),
-        Some(PrettyOptions { ref indent }) => {
-            s
-                .split("\n").map(|l| format!("{}{}", indent, l))
-                .collect::<Vec<String>>()
-                .join("\n")
-        },
+        Some(PrettyOptions { ref indent }) => s
+            .split("\n")
+            .map(|l| format!("{}{}", indent, l))
+            .collect::<Vec<String>>()
+            .join("\n"),
     }
 }
 
@@ -55,7 +54,7 @@ impl GenContext {
 impl Default for GenContext {
     fn default() -> Self {
         GenContext {
-            pretty: Some(Default::default())
+            pretty: Some(Default::default()),
         }
     }
 }
@@ -184,7 +183,7 @@ impl Gen for Stmt {
             } => {
                 let rendered_stmts = stmts
                     .iter()
-                    .map(|v| indent(ctx, &v.gen(ctx)))
+                    .map(|v| indent(&v.gen(ctx), ctx))
                     .collect::<Vec<String>>()
                     .join("\n");
                 format!(
@@ -239,7 +238,7 @@ pub enum Expr {
     // a
     Var(String),
     // object
-    Object(HashMap<String, Expr>),
+    Object(LinkedHashMap<String, Expr>),
     // a > b
     Comp {
         op: CompOp,
@@ -285,7 +284,27 @@ impl Gen for Expr {
         match self {
             Expr::Literal(val) => val.gen(ctx),
             Expr::Var(ident) => ident.to_string(),
-            Expr::Object(obj) => panic!("Not implemented yet"),
+            Expr::Object(obj) => {
+                let kvpairs = obj
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            Expr::Literal(Literal::String(k.to_string())).gen(ctx),
+                            v.gen(ctx),
+                        )
+                    })
+                    .collect::<Vec<(String, String)>>();
+                format!(
+                    "{{
+{kvpairs}
+}}",
+                    kvpairs = kvpairs
+                        .iter()
+                        .map(|(k, v)| indent(&format!("{}: {}", k, v), ctx))
+                        .collect::<Vec<String>>()
+                        .join(",\n")
+                )
+            }
             Expr::Comp { op, l, r } => format!("({}) {} ({})", l.gen(ctx), op.gen(ctx), r.gen(ctx)),
             Expr::Arith { op, l, r } => {
                 format!("({}) {} ({})", l.gen(ctx), op.gen(ctx), r.gen(ctx))
@@ -307,7 +326,7 @@ impl Gen for Expr {
             } => {
                 let rendered_stmts = stmts
                     .iter()
-                    .map(|v| indent(&ctx, &v.gen(ctx)))
+                    .map(|v| indent(&v.gen(ctx), &ctx))
                     .collect::<Vec<String>>()
                     .join("\n");
                 format!(
@@ -331,7 +350,7 @@ impl Gen for Expr {
                     Left(stmts) => {
                         let rendered_stmts = stmts
                             .iter()
-                            .map(|v| indent(&ctx, &v.gen(ctx)))
+                            .map(|v| indent(&v.gen(ctx), &ctx))
                             .collect::<Vec<String>>()
                             .join("\n");
                         format!(
@@ -376,7 +395,7 @@ impl Gen for Constructor {
         let rendered_stmts = self
             .stmts
             .iter()
-            .map(|v| indent(&ctx, &v.gen(ctx)))
+            .map(|v| indent(&v.gen(ctx), &ctx))
             .collect::<Vec<String>>()
             .join("\n");
         format!(
@@ -408,7 +427,7 @@ impl Gen for Method {
         let rendered_stmts = self
             .stmts
             .iter()
-            .map(|v| indent(&ctx, &v.gen(ctx)))
+            .map(|v| indent(&v.gen(ctx), &ctx))
             .collect::<Vec<String>>()
             .join("\n");
         format!(
@@ -435,7 +454,7 @@ impl Gen for Getter {
         let rendered_stmts = self
             .stmts
             .iter()
-            .map(|v| indent(&ctx, &v.gen(ctx)))
+            .map(|v| indent(&v.gen(ctx), &ctx))
             .collect::<Vec<String>>()
             .join("\n");
         format!(
@@ -480,7 +499,7 @@ class {ident} {extends}{{
             },
             decls = rendered_decls
                 .iter()
-                .map(|decl| format!("{}\n", indent(&ctx, decl)))
+                .map(|decl| format!("{}\n", indent(decl, &ctx)))
                 .collect::<Vec<String>>()
                 .join(""),
         )

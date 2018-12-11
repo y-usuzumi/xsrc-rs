@@ -1,0 +1,8 @@
+[package]
+name = "utils"
+version = "0.1.0"
+authors = ["Yukio Usuzumi <anohigisavay@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+linked-hash-map = { version = "0.5.1", features = ["serde_impl"] }

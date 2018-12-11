@@ -1,5 +1,7 @@
 #![feature(box_syntax)]
 
+#[macro_use]
+extern crate serde_derive;
 pub mod javascript;
 pub mod typescript;
 pub mod utils;
