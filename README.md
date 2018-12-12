@@ -18,7 +18,7 @@ Tasks:
 - [x] Context lookup (which provides the capability to look up a member via a path syntax made available by the XS expression parser)
 - [x] Transformer (which calls se_parser and transforms raw schema data structures into context-bounded structures)
 - Rewriters (which rewrites context-bounded data structures into language-specific ASTs)
-  - [ ] JavaScript (Almost done)
+  - [x] JavaScript
   - [ ] TypeScript
 - CodeGen (renders language-specific ASTs into code)
   - [x] JavaScript
