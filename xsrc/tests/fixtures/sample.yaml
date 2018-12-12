@@ -1,5 +1,5 @@
 # $url指根URL，如果为null/undefined，则成为生成的Client构造函数的参数
-$url: "http://www.baidu.com/"
+$url: "http://httpbin.org/"
 # 生成的Client类名，默认为XSClient，如：
 # let c = new XSClient();
 $as: "XiaoSiClient"

@@ -205,7 +205,7 @@ fn gen_api(api: &ContextBoundedAPI, kls: &mut Class) {
     let method = Method {
         ident: Ident(api.name.to_string()),
         params: api
-            .params
+            .bounded_vars
             .iter()
             .map(|(_, p)| p.name.to_string())
             .collect::<Vec<String>>(),
@@ -220,7 +220,17 @@ fn gen_root(root: &ContextBoundedRoot, code: &mut Code) {
         ident: Ident(root.klsname.to_string()),
         extends: None,
         constructor: root_constructor(root),
-        getters: Vec::new(),
+        getters: vec![
+            Getter{
+                ident: Ident("url".to_string()),
+                stmts: vec![
+                    Stmt::Return(Expr::Member{
+                        base: box Expr::Var("this".to_string()),
+                        member: Ident("_url".to_string())
+                    })
+                ]
+            }
+        ],
         methods: Vec::new(),
     };
     for (k, child) in &root.apisets {
@@ -238,7 +248,10 @@ fn gen_root(root: &ContextBoundedRoot, code: &mut Code) {
             }
         }
     }
-    code.stmts.push(Stmt::Class(root_kls));
+    code.stmts.push(Stmt::Export{
+        stmt: box Stmt::Class(root_kls),
+        is_default: true
+    });
 }
 
 pub fn gen(root: &ContextBoundedRoot, gen_ctx: &GenContext) -> String {
