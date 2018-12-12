@@ -1,10 +1,11 @@
 use self::ContextLookupError::*;
-use linked_hash_map::LinkedHashMap;
-use std::collections::HashMap;
+use self::TransformerError::*;
 use super::schema::{APIData, RootSchema};
 pub use super::se_parser::Param;
 use super::se_parser::{parse_expr, Expr, Member, ParserError};
+use linked_hash_map::LinkedHashMap;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::convert::From;
 use std::fmt;
 use std::iter::FromIterator;
@@ -86,6 +87,15 @@ impl From<ContextLookupError> for TransformerError {
 impl From<ParserError> for TransformerError {
     fn from(e: ParserError) -> Self {
         TransformerError::ParserError(e)
+    }
+}
+
+impl fmt::Display for TransformerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ContextLookupError(e) => write!(f, "Context lookup error: {}", e),
+            ParserError(e) => write!(f, "Context lookup error: {}", e),
+        }
     }
 }
 
@@ -258,29 +268,45 @@ fn transform_apiset(
         APIData::API(schema) => {
             let (expr, mut bounded_vars) = parse_expr(&schema.url)?;
             for (name, typ) in &schema.params {
-                let p = Param { name: name.to_string(), typ: typ.clone() };
+                let p = Param {
+                    name: name.to_string(),
+                    typ: typ.clone(),
+                };
                 if bounded_vars.insert(name.to_string(), p).is_some() {
-                    return Err(TransformerError::from(ParserError::DuplicateParam(name.to_string())));
+                    return Err(TransformerError::from(ParserError::DuplicateParam(
+                        name.to_string(),
+                    )));
                 }
             }
             for (name, typ) in &schema.data {
-                let p = Param { name: name.to_string(), typ: typ.clone() };
+                let p = Param {
+                    name: name.to_string(),
+                    typ: typ.clone(),
+                };
                 if bounded_vars.insert(name.to_string(), p).is_some() {
-                    return Err(TransformerError::from(ParserError::DuplicateParam(name.to_string())));
+                    return Err(TransformerError::from(ParserError::DuplicateParam(
+                        name.to_string(),
+                    )));
                 }
             }
-            let data = LinkedHashMap::from_iter(
-                schema.data.iter().map(|(k, v)| (
+            let data = LinkedHashMap::from_iter(schema.data.iter().map(|(k, v)| {
+                (
                     k.to_string(),
-                    Param{ name: k.to_string(), typ: v.clone()})
+                    Param {
+                        name: k.to_string(),
+                        typ: v.clone(),
+                    },
                 )
-            );
-            let params = LinkedHashMap::from_iter(
-                schema.params.iter().map(|(k, v)| (
+            }));
+            let params = LinkedHashMap::from_iter(schema.params.iter().map(|(k, v)| {
+                (
                     k.to_string(),
-                    Param{ name: k.to_string(), typ: v.clone()})
+                    Param {
+                        name: k.to_string(),
+                        typ: v.clone(),
+                    },
                 )
-            );
+            }));
             Ok(ContextBoundedAPIData::API(ContextBoundedAPI {
                 name: name.to_string(),
                 method: HttpMethod::from_str(&schema.method),

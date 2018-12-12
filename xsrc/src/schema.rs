@@ -13,6 +13,15 @@ pub enum ParserError {
     SerdeError(serde_yaml::Error),
 }
 
+impl fmt::Display for ParserError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ParserError::IOError(e) => write!(f, "IO error: {}", e),
+            ParserError::SerdeError(e) => write!(f, "Serde error: {}", e),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct APIDataMap(pub LinkedHashMap<String, APIData>);
 
