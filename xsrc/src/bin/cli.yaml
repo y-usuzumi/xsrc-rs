@@ -1,0 +1,30 @@
+name: XiaoSi Rest Client Code Generator
+version: "1.0"
+author: Yukio Usuzumi <anohigisavay@gmail.com>
+about: Salty fish
+args:
+    - schema:
+        help: The schema file to parse
+        required: true
+        index: 1
+    - lang:
+        short: x
+        long: lang
+        value_name: lang
+        help: The language of the rendered code
+        takes_value: true
+    - output:
+        short: o
+        long: output
+        value_name: output
+        help: The output file
+        takes_value: true
+# subcommands:
+#     - test:
+#         about: controls testing features
+#         version: "1.3"
+#         author: Someone E. <someone_else@other.com>
+#         args:
+#             - debug:
+#                 short: d
+#                 help: print debug information
