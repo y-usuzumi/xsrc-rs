@@ -1,13 +1,8 @@
 #![feature(box_syntax)]
 
-#[macro_use]
-extern crate maplit;
-#[macro_use]
-extern crate clap;
-extern crate xsrc;
-
+use maplit::hashmap;
 use std::fmt;
-use clap::App;
+use clap::{App, load_yaml};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;

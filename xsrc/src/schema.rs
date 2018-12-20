@@ -1,3 +1,4 @@
+use serde_derive::{Serialize, Deserialize};
 use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
 use serde::ser::{Serialize, SerializeMap, Serializer};
 use linked_hash_map::LinkedHashMap;
