@@ -1,15 +1,7 @@
+#![feature(try_blocks)]
+#![feature(custom_attribute)]
 #![feature(non_ascii_idents)]
 #![feature(box_syntax)]
-
-#[macro_use]
-extern crate maplit;
-extern crate serde_yaml;
-#[macro_use]
-extern crate serde_derive;
-extern crate codegen;
-#[macro_use]
-extern crate utils;
-extern crate linked_hash_map;
 
 pub mod rewriter;
 pub mod schema;

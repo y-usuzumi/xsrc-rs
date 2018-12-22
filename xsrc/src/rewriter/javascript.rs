@@ -4,6 +4,7 @@ use codegen::javascript::*;
 use linked_hash_map::LinkedHashMap;
 use std::collections::HashMap;
 use std::iter::FromIterator;
+use utils::linked_hashmap;
 
 fn gen_ref(ms: &[sp::Member]) -> Expr {
     let mut expr = Expr::Var("this".to_string());
@@ -220,17 +221,13 @@ fn gen_root(root: &ContextBoundedRoot, code: &mut Code) {
         ident: Ident(root.klsname.to_string()),
         extends: None,
         constructor: root_constructor(root),
-        getters: vec![
-            Getter{
-                ident: Ident("url".to_string()),
-                stmts: vec![
-                    Stmt::Return(Expr::Member{
-                        base: box Expr::Var("this".to_string()),
-                        member: Ident("_url".to_string())
-                    })
-                ]
-            }
-        ],
+        getters: vec![Getter {
+            ident: Ident("url".to_string()),
+            stmts: vec![Stmt::Return(Expr::Member {
+                base: box Expr::Var("this".to_string()),
+                member: Ident("_url".to_string()),
+            })],
+        }],
         methods: Vec::new(),
     };
     for (k, child) in &root.apisets {
@@ -248,9 +245,9 @@ fn gen_root(root: &ContextBoundedRoot, code: &mut Code) {
             }
         }
     }
-    code.stmts.push(Stmt::Export{
+    code.stmts.push(Stmt::Export {
         stmt: box Stmt::Class(root_kls),
-        is_default: true
+        is_default: true,
     });
 }
 

@@ -10,6 +10,7 @@ use std::convert::From;
 use std::fmt;
 use std::iter::FromIterator;
 use std::rc::Rc;
+use utils::linked_hashmap;
 
 #[derive(Debug, PartialEq)]
 pub enum HttpMethod {
