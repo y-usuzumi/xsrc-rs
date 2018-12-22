@@ -1,3 +1,4 @@
+#![feature(try_blocks)]
 #![feature(custom_attribute)]
 #![feature(non_ascii_idents)]
 #![feature(box_syntax)]
